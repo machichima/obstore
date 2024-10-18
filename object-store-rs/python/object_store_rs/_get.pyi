@@ -82,7 +82,34 @@ class GetOptions(TypedDict):
     """
 
 class GetResult:
-    """Result for a get request"""
+    """Result for a get request.
+
+    You can materialize the entire buffer by using either `bytes` or `bytes_async`, or
+    you can stream the result using `stream`. `__iter__` and `__aiter__` are implemented
+    as aliases to `stream`, so you can alternatively call `iter()` or `aiter()` on
+    `GetResult` to start an iterator.
+
+    Using as an async iterator:
+    ```py
+    resp = await obs.get_async(store, path)
+    # 5MB chunk size in stream
+    stream = resp.stream(min_chunk_size=5 * 1024 * 1024)
+    async for buf in stream:
+        print(len(buf))
+    ```
+
+    Using as a sync iterator:
+    ```py
+    resp = obs.get(store, path)
+    # 20MB chunk size in stream
+    stream = resp.stream(min_chunk_size=20 * 1024 * 1024)
+    for buf in stream:
+        print(len(buf))
+    ```
+
+    Note that after calling `bytes`, `bytes_async`, or `stream`, you will no longer be
+    able to call other methods on this object, such as the `meta` attribute.
+    """
 
     def bytes(self) -> bytes:
         """
@@ -97,6 +124,45 @@ class GetResult:
     @property
     def meta(self) -> ObjectMeta:
         """The ObjectMeta for this object"""
+
+    def stream(self, min_chunk_size: int = 10 * 1024 * 1024) -> BytesStream:
+        """Return a chunked stream over the result's bytes.
+
+        Args:
+            min_chunk_size: The minimum size in bytes for each chunk in the returned
+                `BytesStream`. All chunks except for the last chunk will be at least
+                this size. Defaults to 10*1024*1024 (10MB).
+
+        Returns:
+            A chunked stream
+        """
+
+    def __aiter__(self) -> BytesStream:
+        """
+        Return a chunked stream over the result's bytes with the default (10MB) chunk
+        size.
+        """
+
+    def __iter__(self) -> BytesStream:
+        """
+        Return a chunked stream over the result's bytes with the default (10MB) chunk
+        size.
+        """
+
+class BytesStream:
+    """An async stream of bytes."""
+
+    def __aiter__(self) -> BytesStream:
+        """Return `Self` as an async iterator."""
+
+    def __iter__(self) -> BytesStream:
+        """Return `Self` as an async iterator."""
+
+    async def __anext__(self) -> bytes:
+        """Return the next chunk of bytes in the stream."""
+
+    def __next__(self) -> bytes:
+        """Return the next chunk of bytes in the stream."""
 
 def get(
     store: ObjectStore, location: str, *, options: GetOptions | None = None
