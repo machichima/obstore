@@ -41,7 +41,13 @@ class ListResult(TypedDict):
     objects: List[ObjectMeta]
     """Object metadata for the listing"""
 
-def list(store: ObjectStore, prefix: str | None = None) -> List[ObjectMeta]:
+def list(
+    store: ObjectStore,
+    prefix: str | None = None,
+    *,
+    offset: str | None = None,
+    max_items: int | None = 2000,
+) -> List[ObjectMeta]:
     """
     List all the objects with the given prefix.
 
@@ -56,11 +62,21 @@ def list(store: ObjectStore, prefix: str | None = None) -> List[ObjectMeta]:
         store: The ObjectStore instance to use.
         prefix: The prefix within ObjectStore to use for listing. Defaults to None.
 
+    Keyword Args:
+        offset: If provided, list all the objects with the given prefix and a location greater than `offset`. Defaults to `None`.
+        max_items: The maximum number of items to return. Defaults to 2000.
+
     Returns:
         A list of `ObjectMeta`.
     """
 
-async def list_async(store: ObjectStore, prefix: str | None = None) -> List[ObjectMeta]:
+async def list_async(
+    store: ObjectStore,
+    prefix: str | None = None,
+    *,
+    offset: str | None = None,
+    max_items: int | None = 2000,
+) -> List[ObjectMeta]:
     """Call `list` asynchronously.
 
     Refer to the documentation for [list][object_store_rs.list].
