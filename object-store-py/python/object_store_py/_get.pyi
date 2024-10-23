@@ -90,8 +90,6 @@ class GetOptions(TypedDict, total=False):
         of the request_, not the byte offset. This is equivalent to `bytes=-{int}` as an
         HTTP header.
 
-
-
     <https://datatracker.ietf.org/doc/html/rfc9110#name-range>
     """
 
@@ -230,7 +228,7 @@ async def get_async(
 ) -> GetResult:
     """Call `get` asynchronously.
 
-    Refer to the documentation for [get][object_store_rs.get].
+    Refer to the documentation for [get][object_store_py.get].
     """
 
 def get_range(store: ObjectStore, path: str, offset: int, length: int) -> Buffer:
@@ -258,7 +256,7 @@ async def get_range_async(
 ) -> Buffer:
     """Call `get_range` asynchronously.
 
-    Refer to the documentation for [get_range][object_store_rs.get_range].
+    Refer to the documentation for [get_range][object_store_py.get_range].
     """
 
 def get_ranges(
@@ -289,5 +287,5 @@ async def get_ranges_async(
 ) -> List[Buffer]:
     """Call `get_ranges` asynchronously.
 
-    Refer to the documentation for [get_ranges][object_store_rs.get_ranges].
+    Refer to the documentation for [get_ranges][object_store_py.get_ranges].
     """
