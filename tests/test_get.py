@@ -1,6 +1,7 @@
-import object_store_py as obs
 import pytest
-from object_store_py.store import MemoryStore
+
+import obstore as obs
+from obstore.store import MemoryStore
 
 
 def test_stream_sync():
