@@ -25,6 +25,7 @@ S3ConfigKey = Literal[
     "aws_imdsv1_fallback",
     "aws_metadata_endpoint",
     "aws_region",
+    "aws_request_payer",
     "aws_s3_express",
     "aws_secret_access_key",
     "aws_server_side_encryption",
@@ -47,6 +48,7 @@ S3ConfigKey = Literal[
     "imdsv1_fallback",
     "metadata_endpoint",
     "region",
+    "request_payer",
     "s3_express",
     "secret_access_key",
     "session_token",
@@ -70,6 +72,7 @@ S3ConfigKey = Literal[
     "AWS_IMDSV1_FALLBACK",
     "AWS_METADATA_ENDPOINT",
     "AWS_REGION",
+    "AWS_REQUEST_PAYER",
     "AWS_S3_EXPRESS",
     "AWS_SECRET_ACCESS_KEY",
     "AWS_SERVER_SIDE_ENCRYPTION",
@@ -92,6 +95,7 @@ S3ConfigKey = Literal[
     "IMDSV1_FALLBACK",
     "METADATA_ENDPOINT",
     "REGION",
+    "REQUEST_PAYER",
     "S3_EXPRESS",
     "SECRET_ACCESS_KEY",
     "SESSION_TOKEN",
@@ -107,6 +111,7 @@ Either lower case or upper case strings are accepted.
 - `aws_access_key_id`, `access_key_id`: AWS Access Key
 - `aws_secret_access_key`, `secret_access_key`: Secret Access Key
 - `aws_region`, `region`: Region
+- `aws_request_payer`, `request_payer`: if `True`, enable operations on requester-pays buckets.
 - `aws_default_region`, `default_region`: Default region
 - `aws_bucket`, `aws_bucket_name`, `bucket`, `bucket_name`: Bucket name
 - `aws_endpoint`, `aws_endpoint_url`, `endpoint`, `endpoint_url`: Sets custom endpoint for communicating with AWS S3.
@@ -123,6 +128,13 @@ class S3Store:
     """
     Configure a connection to Amazon S3 using the specified credentials in the specified
     Amazon region and bucket.
+
+    **Examples**:
+
+    **Using requester-pays buckets**:
+
+    Include `'AWS_REQUESTER_PAYS': True` as an element in the `config`. Or, if you're
+    using `S3Store.from_env`, have `AWS_REQUESTER_PAYS=True` set in the environment.
     """
 
     @classmethod
@@ -136,7 +148,11 @@ class S3Store:
     ) -> S3Store:
         """Construct a new S3Store with regular AWS environment variables
 
-        Variables extracted from environment:
+        All environment variables starting with `AWS_` will be evaluated. Names must
+        match items from `S3ConfigKey`. Only upper-case environment variables are
+        accepted.
+
+        Some examples of variables extracted from environment:
 
         - `AWS_ACCESS_KEY_ID` -> access_key_id
         - `AWS_SECRET_ACCESS_KEY` -> secret_access_key
@@ -145,6 +161,7 @@ class S3Store:
         - `AWS_SESSION_TOKEN` -> token
         - `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` -> <https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html>
         - `AWS_ALLOW_HTTP` -> set to "true" to permit HTTP connections without TLS
+        - `AWS_REQUEST_PAYER` -> set to "true" to permit requester-pays connections.
 
         Args:
             bucket: The AWS bucket to use.
