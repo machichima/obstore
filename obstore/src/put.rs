@@ -4,7 +4,7 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use indexmap::IndexMap;
 use object_store::path::Path;
 use object_store::{
@@ -63,7 +63,7 @@ impl<'py> FromPyObject<'py> for PyUpdateVersion {
 pub(crate) enum PullSource {
     File(BufReader<File>),
     FileLike(PyFileLikeObject),
-    Buffer(Cursor<PyBytes>),
+    Buffer(Cursor<Bytes>),
 }
 
 impl PullSource {
@@ -78,24 +78,6 @@ impl PullSource {
     /// Whether to use multipart uploads.
     fn use_multipart(&mut self, chunk_size: usize) -> PyObjectStoreResult<bool> {
         Ok(self.nbytes()? > chunk_size)
-    }
-}
-
-impl<'py> FromPyObject<'py> for PullSource {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        if let Ok(path) = ob.extract::<PathBuf>() {
-            Ok(Self::File(BufReader::new(File::open(path)?)))
-        } else if let Ok(buffer) = ob.extract::<PyBytes>() {
-            Ok(Self::Buffer(Cursor::new(buffer)))
-        } else {
-            Ok(Self::FileLike(PyFileLikeObject::with_requirements(
-                ob.clone().unbind(),
-                true,
-                false,
-                true,
-                false,
-            )?))
-        }
     }
 }
 
@@ -149,14 +131,9 @@ impl SyncPushSource {
         }
     }
 
-    fn read_all(&mut self) -> PyObjectStoreResult<Bytes> {
+    fn read_all(&mut self) -> PyObjectStoreResult<PutPayload> {
         let buffers = self.into_iter().collect::<PyObjectStoreResult<Vec<_>>>()?;
-        let capacity = buffers.iter().fold(0, |acc, buf| acc + buf.len());
-        let mut single_buf = BytesMut::with_capacity(capacity);
-        for buf in buffers {
-            single_buf.extend_from_slice(&buf);
-        }
-        Ok(single_buf.into())
+        Ok(PutPayload::from_iter(buffers))
     }
 }
 
@@ -178,10 +155,12 @@ pub(crate) enum AsyncPushSource {
 }
 
 impl AsyncPushSource {
-    async fn read_all(&mut self) -> PyObjectStoreResult<Bytes> {
-        // Note: this code path is never hit because async generator input always uses multipart
-        // uploads. But we should still implement this to flesh out support.
-        todo!()
+    async fn read_all(&mut self) -> PyObjectStoreResult<PutPayload> {
+        let mut buffers = vec![];
+        while let Some(buf) = self.next_chunk().await? {
+            buffers.push(buf);
+        }
+        Ok(PutPayload::from_iter(buffers))
     }
 
     async fn next_chunk(&mut self) -> PyObjectStoreResult<Option<Bytes>> {
@@ -239,13 +218,16 @@ impl PutInput {
         }
     }
 
-    async fn read_all(&mut self) -> PyObjectStoreResult<Bytes> {
+    async fn read_all(&mut self) -> PyObjectStoreResult<PutPayload> {
         match self {
-            Self::Pull(pull_source) => {
-                let mut buf = Vec::new();
-                pull_source.read_to_end(&mut buf)?;
-                Ok(Bytes::from(buf))
-            }
+            Self::Pull(pull_source) => match pull_source {
+                PullSource::Buffer(buffer) => Ok(buffer.get_ref().clone().into()),
+                source => {
+                    let mut buf = Vec::new();
+                    source.read_to_end(&mut buf)?;
+                    Ok(Bytes::from(buf).into())
+                }
+            },
             Self::SyncPush(push_source) => push_source.read_all(),
             Self::AsyncPush(push_source) => push_source.read_all().await,
         }
@@ -260,7 +242,9 @@ impl<'py> FromPyObject<'py> for PutInput {
                 path,
             )?))))
         } else if let Ok(buffer) = ob.extract::<PyBytes>() {
-            Ok(Self::Pull(PullSource::Buffer(Cursor::new(buffer))))
+            Ok(Self::Pull(PullSource::Buffer(Cursor::new(
+                buffer.into_inner(),
+            ))))
         }
         // Check for file-like object
         else if ob.hasattr(intern!(py, "read"))? && ob.hasattr(intern!(py, "seek"))? {
@@ -321,6 +305,12 @@ pub(crate) fn put(
     chunk_size: usize,
     max_concurrency: usize,
 ) -> PyObjectStoreResult<PyPutResult> {
+    if matches!(file, PutInput::AsyncPush(_)) {
+        return Err(
+            PyValueError::new_err("Async input not allowed in 'put'. Use 'put_async'.").into(),
+        );
+    }
+
     let mut use_multipart = if let Some(use_multipart) = use_multipart {
         use_multipart
     } else {
@@ -432,8 +422,7 @@ async fn put_inner(
         opts.mode = mode.0;
     }
 
-    let buffer = reader.read_all().await?;
-    let payload = PutPayload::from_bytes(buffer);
+    let payload = reader.read_all().await?;
     Ok(PyPutResult(store.put_opts(path, payload, opts).await?))
 }
 
