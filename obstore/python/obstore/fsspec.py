@@ -181,8 +181,8 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
 class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
-        if mode != "rb":
-            raise ValueError("Only 'rb' mode is currently supported")
+        # if mode != "rb":
+        #     raise ValueError("Only 'rb' mode is currently supported")
         super().__init__(fs, path, mode, **kwargs)
 
     def read(self, length: int = -1):
