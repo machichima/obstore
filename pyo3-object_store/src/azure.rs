@@ -8,6 +8,7 @@ use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyType;
 
 use crate::client::PyClientOptions;
+use crate::config::PyConfigValue;
 use crate::error::{PyObjectStoreError, PyObjectStoreResult};
 use crate::retry::PyRetryConfig;
 
@@ -30,21 +31,49 @@ impl PyAzureStore {
 
 #[pymethods]
 impl PyAzureStore {
+    // Create from parameters
+    #[new]
+    #[pyo3(signature = (container, *, config=None, client_options=None, retry_config=None, **kwargs))]
+    fn new(
+        container: String,
+        config: Option<PyAzureConfig>,
+        client_options: Option<PyClientOptions>,
+        retry_config: Option<PyRetryConfig>,
+        kwargs: Option<PyAzureConfig>,
+    ) -> PyObjectStoreResult<Self> {
+        let mut builder = MicrosoftAzureBuilder::new().with_container_name(container);
+        if let Some(config) = config {
+            builder = config.apply_config(builder);
+        }
+        if let Some(kwargs) = kwargs {
+            builder = kwargs.apply_config(builder);
+        }
+        if let Some(client_options) = client_options {
+            builder = builder.with_client_options(client_options.into())
+        }
+        if let Some(retry_config) = retry_config {
+            builder = builder.with_retry(retry_config.into())
+        }
+        Ok(Self(Arc::new(builder.build()?)))
+    }
+
     // Create from env variables
     #[classmethod]
-    #[pyo3(signature = (container, *, config=None, client_options=None, retry_config=None))]
+    #[pyo3(signature = (container, *, config=None, client_options=None, retry_config=None, **kwargs))]
     fn from_env(
         _cls: &Bound<PyType>,
         container: String,
-        config: Option<HashMap<PyAzureConfigKey, String>>,
+        config: Option<PyAzureConfig>,
         client_options: Option<PyClientOptions>,
         retry_config: Option<PyRetryConfig>,
+        kwargs: Option<PyAzureConfig>,
     ) -> PyObjectStoreResult<Self> {
         let mut builder = MicrosoftAzureBuilder::from_env().with_container_name(container);
         if let Some(config) = config {
-            for (key, value) in config.into_iter() {
-                builder = builder.with_config(key.0, value);
-            }
+            builder = config.apply_config(builder);
+        }
+        if let Some(kwargs) = kwargs {
+            builder = kwargs.apply_config(builder);
         }
         if let Some(client_options) = client_options {
             builder = builder.with_client_options(client_options.into())
@@ -56,19 +85,21 @@ impl PyAzureStore {
     }
 
     #[classmethod]
-    #[pyo3(signature = (url, *, config=None, client_options=None, retry_config=None))]
+    #[pyo3(signature = (url, *, config=None, client_options=None, retry_config=None, **kwargs))]
     fn from_url(
         _cls: &Bound<PyType>,
         url: &str,
-        config: Option<HashMap<PyAzureConfigKey, String>>,
+        config: Option<PyAzureConfig>,
         client_options: Option<PyClientOptions>,
         retry_config: Option<PyRetryConfig>,
+        kwargs: Option<PyAzureConfig>,
     ) -> PyObjectStoreResult<Self> {
         let mut builder = MicrosoftAzureBuilder::from_env().with_url(url);
         if let Some(config) = config {
-            for (key, value) in config.into_iter() {
-                builder = builder.with_config(key.0, value);
-            }
+            builder = config.apply_config(builder);
+        }
+        if let Some(kwargs) = kwargs {
+            builder = kwargs.apply_config(builder);
         }
         if let Some(client_options) = client_options {
             builder = builder.with_client_options(client_options.into())
@@ -93,5 +124,23 @@ impl<'py> FromPyObject<'py> for PyAzureConfigKey {
         let s = ob.extract::<PyBackedStr>()?.to_lowercase();
         let key = AzureConfigKey::from_str(&s).map_err(PyObjectStoreError::ObjectStoreError)?;
         Ok(Self(key))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct PyAzureConfig(HashMap<PyAzureConfigKey, PyConfigValue>);
+
+impl<'py> FromPyObject<'py> for PyAzureConfig {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Self(ob.extract()?))
+    }
+}
+
+impl PyAzureConfig {
+    fn apply_config(self, mut builder: MicrosoftAzureBuilder) -> MicrosoftAzureBuilder {
+        for (key, value) in self.0.into_iter() {
+            builder = builder.with_config(key.0, value.0);
+        }
+        builder
     }
 }

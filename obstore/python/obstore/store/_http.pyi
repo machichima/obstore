@@ -1,17 +1,32 @@
-from typing import Dict
-
-from ._client import ClientConfigKey
+from ._client import ClientConfig
 from ._retry import RetryConfig
 
 class HTTPStore:
-    """Configure a connection to a generic HTTP server"""
+    """Configure a connection to a generic HTTP server
+
+    **Example**
+
+    Accessing the number of stars for a repo:
+
+    ```py
+    import json
+
+    import obstore as obs
+    from obstore.store import HTTPStore
+
+    store = HTTPStore.from_url("https://api.github.com")
+    resp = obs.get(store, "repos/developmentseed/obstore")
+    data = json.loads(resp.bytes())
+    print(data["stargazers_count"])
+    ```
+    """
 
     @classmethod
     def from_url(
         cls,
         url: str,
         *,
-        client_options: Dict[ClientConfigKey, str | bool] | None = None,
+        client_options: ClientConfig | None = None,
         retry_config: RetryConfig | None = None,
     ) -> HTTPStore:
         """Construct a new HTTPStore from a URL

@@ -8,6 +8,7 @@ use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyType;
 
 use crate::client::PyClientOptions;
+use crate::config::PyConfigValue;
 use crate::error::{PyObjectStoreError, PyObjectStoreResult};
 use crate::retry::PyRetryConfig;
 
@@ -30,21 +31,49 @@ impl PyGCSStore {
 
 #[pymethods]
 impl PyGCSStore {
+    // Create from parameters
+    #[new]
+    #[pyo3(signature = (bucket, *, config=None, client_options=None, retry_config=None, **kwargs))]
+    fn new(
+        bucket: String,
+        config: Option<PyGoogleConfig>,
+        client_options: Option<PyClientOptions>,
+        retry_config: Option<PyRetryConfig>,
+        kwargs: Option<PyGoogleConfig>,
+    ) -> PyObjectStoreResult<Self> {
+        let mut builder = GoogleCloudStorageBuilder::new().with_bucket_name(bucket);
+        if let Some(config) = config {
+            builder = config.apply_config(builder);
+        }
+        if let Some(kwargs) = kwargs {
+            builder = kwargs.apply_config(builder);
+        }
+        if let Some(client_options) = client_options {
+            builder = builder.with_client_options(client_options.into())
+        }
+        if let Some(retry_config) = retry_config {
+            builder = builder.with_retry(retry_config.into())
+        }
+        Ok(Self(Arc::new(builder.build()?)))
+    }
+
     // Create from env variables
     #[classmethod]
-    #[pyo3(signature = (bucket, *, config=None, client_options=None, retry_config=None))]
+    #[pyo3(signature = (bucket, *, config=None, client_options=None, retry_config=None, **kwargs))]
     fn from_env(
         _cls: &Bound<PyType>,
         bucket: String,
-        config: Option<HashMap<PyGoogleConfigKey, String>>,
+        config: Option<PyGoogleConfig>,
         client_options: Option<PyClientOptions>,
         retry_config: Option<PyRetryConfig>,
+        kwargs: Option<PyGoogleConfig>,
     ) -> PyObjectStoreResult<Self> {
         let mut builder = GoogleCloudStorageBuilder::from_env().with_bucket_name(bucket);
         if let Some(config) = config {
-            for (key, value) in config.into_iter() {
-                builder = builder.with_config(key.0, value);
-            }
+            builder = config.apply_config(builder);
+        }
+        if let Some(kwargs) = kwargs {
+            builder = kwargs.apply_config(builder);
         }
         if let Some(client_options) = client_options {
             builder = builder.with_client_options(client_options.into())
@@ -56,19 +85,21 @@ impl PyGCSStore {
     }
 
     #[classmethod]
-    #[pyo3(signature = (url, *, config=None, client_options=None, retry_config=None))]
+    #[pyo3(signature = (url, *, config=None, client_options=None, retry_config=None, **kwargs))]
     fn from_url(
         _cls: &Bound<PyType>,
         url: &str,
-        config: Option<HashMap<PyGoogleConfigKey, String>>,
+        config: Option<PyGoogleConfig>,
         client_options: Option<PyClientOptions>,
         retry_config: Option<PyRetryConfig>,
+        kwargs: Option<PyGoogleConfig>,
     ) -> PyObjectStoreResult<Self> {
         let mut builder = GoogleCloudStorageBuilder::from_env().with_url(url);
         if let Some(config) = config {
-            for (key, value) in config.into_iter() {
-                builder = builder.with_config(key.0, value);
-            }
+            builder = config.apply_config(builder);
+        }
+        if let Some(kwargs) = kwargs {
+            builder = kwargs.apply_config(builder);
         }
         if let Some(client_options) = client_options {
             builder = builder.with_client_options(client_options.into())
@@ -93,5 +124,23 @@ impl<'py> FromPyObject<'py> for PyGoogleConfigKey {
         let s = ob.extract::<PyBackedStr>()?.to_lowercase();
         let key = GoogleConfigKey::from_str(&s).map_err(PyObjectStoreError::ObjectStoreError)?;
         Ok(Self(key))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct PyGoogleConfig(HashMap<PyGoogleConfigKey, PyConfigValue>);
+
+impl<'py> FromPyObject<'py> for PyGoogleConfig {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Self(ob.extract()?))
+    }
+}
+
+impl PyGoogleConfig {
+    fn apply_config(self, mut builder: GoogleCloudStorageBuilder) -> GoogleCloudStorageBuilder {
+        for (key, value) in self.0.into_iter() {
+            builder = builder.with_config(key.0, value.0);
+        }
+        builder
     }
 }

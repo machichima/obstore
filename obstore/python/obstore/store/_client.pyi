@@ -1,41 +1,37 @@
-from typing import Literal
+from datetime import timedelta
+from typing import TypedDict
 
-ClientConfigKey = Literal[
-    "allow_http",
-    "allow_invalid_certificates",
-    "connect_timeout",
-    "default_content_type",
-    "http1_only",
-    "http2_keep_alive_interval",
-    "http2_keep_alive_timeout",
-    "http2_keep_alive_while_idle",
-    "http2_only",
-    "pool_idle_timeout",
-    "pool_max_idle_per_host",
-    "proxy_url",
-    "timeout",
-    "user_agent",
-    "ALLOW_HTTP",
-    "ALLOW_INVALID_CERTIFICATES",
-    "CONNECT_TIMEOUT",
-    "DEFAULT_CONTENT_TYPE",
-    "HTTP1_ONLY",
-    "HTTP2_KEEP_ALIVE_INTERVAL",
-    "HTTP2_KEEP_ALIVE_TIMEOUT",
-    "HTTP2_KEEP_ALIVE_WHILE_IDLE",
-    "HTTP2_ONLY",
-    "POOL_IDLE_TIMEOUT",
-    "POOL_MAX_IDLE_PER_HOST",
-    "PROXY_URL",
-    "TIMEOUT",
-    "USER_AGENT",
-]
-"""Allowed client configuration keys
+class ClientConfig(TypedDict, total=False):
+    """HTTP client configuration
 
-Either lower case or upper case strings are accepted.
+    For timeout values (`connect_timeout`, `http2_keep_alive_timeout`,
+    `pool_idle_timeout`, and `timeout`), values can either be Python `timedelta`
+    objects, or they can be "human-readable duration strings".
 
-- `"allow_http"`: Allow non-TLS, i.e. non-HTTPS connections.
-- `"allow_invalid_certificates"`: Skip certificate validation on https connections.
+    The human-readable duration string is a concatenation of time spans. Where each time
+    span is an integer number and a suffix. Supported suffixes:
+
+    - `nsec`, `ns` -- nanoseconds
+    - `usec`, `us` -- microseconds
+    - `msec`, `ms` -- milliseconds
+    - `seconds`, `second`, `sec`, `s`
+    - `minutes`, `minute`, `min`, `m`
+    - `hours`, `hour`, `hr`, `h`
+    - `days`, `day`, `d`
+    - `weeks`, `week`, `w`
+    - `months`, `month`, `M` -- defined as 30.44 days
+    - `years`, `year`, `y` -- defined as 365.25 days
+
+    For example:
+
+    - `"2h 37min"`
+    - `"32ms"`
+    """
+
+    allow_http: bool
+    """Allow non-TLS, i.e. non-HTTPS connections."""
+    allow_invalid_certificates: bool
+    """Skip certificate validation on https connections.
 
     !!! warning
 
@@ -44,20 +40,35 @@ Either lower case or upper case strings are accepted.
         will be trusted for use. This includes expired certificates. This
         introduces significant vulnerabilities, and should only be used
         as a last resort or for testing
+    """
+    connect_timeout: str | timedelta
+    """Timeout for only the connect phase of a Client"""
+    default_content_type: str
+    """default `CONTENT_TYPE` for uploads"""
+    http1_only: bool
+    """Only use http1 connections."""
+    http2_keep_alive_interval: str
+    """Interval for HTTP2 Ping frames should be sent to keep a connection alive."""
+    http2_keep_alive_timeout: str | timedelta
+    """Timeout for receiving an acknowledgement of the keep-alive ping."""
+    http2_keep_alive_while_idle: str
+    """Enable HTTP2 keep alive pings for idle connections"""
+    http2_only: bool
+    """Only use http2 connections"""
+    pool_idle_timeout: str | timedelta
+    """The pool max idle timeout.
 
-- `"connect_timeout"`: Timeout for only the connect phase of a Client
-- `"default_content_type"`: default `CONTENT_TYPE` for uploads
-- `"http1_only"`: Only use http1 connections.
-- `"http2_keep_alive_interval"`: Interval for HTTP2 Ping frames should be sent to keep a connection alive.
-- `"http2_keep_alive_timeout"`: Timeout for receiving an acknowledgement of the keep-alive ping.
-- `"http2_keep_alive_while_idle"`: Enable HTTP2 keep alive pings for idle connections
-- `"http2_only"`: Only use http2 connections
-- `"pool_idle_timeout"`: The pool max idle timeout.
     This is the length of time an idle connection will be kept alive.
-- `"pool_max_idle_per_host"`: maximum number of idle connections per host.
-- `"proxy_url"`: HTTP proxy to use for requests.
-- `"timeout"`: Request timeout.
+    """
+    pool_max_idle_per_host: str
+    """Maximum number of idle connections per host."""
+    proxy_url: str
+    """HTTP proxy to use for requests."""
+    timeout: str | timedelta
+    """Request timeout.
+
     The timeout is applied from when the request starts connecting until the
     response body has finished.
-- `"user_agent"`: User-Agent header to be used by this client.
-"""
+    """
+    user_agent: str
+    """User-Agent header to be used by this client."""

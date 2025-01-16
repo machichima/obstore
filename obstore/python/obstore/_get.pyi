@@ -173,6 +173,8 @@ class GetResult:
     def range(self) -> Tuple[int, int]:
         """The range of bytes returned by this request.
 
+        Note that this is `(start, stop)` **not** `(start, length)`.
+
         This must be accessed _before_ calling `stream`, `bytes`, or `bytes_async`.
         """
 
@@ -223,7 +225,7 @@ class BytesStream:
 
         To fix this, set the `timeout` parameter in the `client_options` passed to the
         initial `get` or `get_async` call. See
-        [ClientConfigKey][obstore.store.ClientConfigKey].
+        [ClientConfig][obstore.store.ClientConfig].
     """
 
     def __aiter__(self) -> BytesStream:
