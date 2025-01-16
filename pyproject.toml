@@ -1,6 +1,6 @@
 [project]
-name = "test-env"
-version = "0.1.0"
+name = "obstore"
+version = "0.3.0b10"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
