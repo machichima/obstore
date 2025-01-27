@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Any, Coroutine, Dict, List, Tuple
+from typing import Tuple
 
 import fsspec.asyn
 import fsspec.spec
@@ -181,8 +181,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
 class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
-        if mode != "rb":
-            raise ValueError("Only 'rb' mode is currently supported")
         super().__init__(fs, path, mode, **kwargs)
 
     def read(self, length: int = -1):
@@ -198,3 +196,17 @@ class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
             data = self.fs.cat_file(self.path, self.loc, self.loc + length)
             self.loc += length
         return data
+
+    def write(self, data):
+        _, path = self.split_path(self.path)
+        out = self.fs.pipe_file(path, data)
+        return out
+
+    def split_path(self, path: str) -> Tuple[str, str]:
+        """
+        Split bucket and file path
+        """
+        path_li = path.split("/")
+        bucket = path_li[0]
+        file_path = "/".join(path_li[1:])
+        return (bucket, file_path)
