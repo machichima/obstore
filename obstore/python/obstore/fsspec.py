@@ -29,6 +29,7 @@ import fsspec.asyn
 import fsspec.spec
 
 import obstore as obs
+from obstore.store import S3Store
 
 # from obstore.store._aws import S3Store
 
@@ -180,16 +181,19 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     def _open(self, path, mode="rb", **kwargs):
         """Return raw bytes-mode file-like from the file-system"""
 
+        if isinstance(self.store, S3Store):
+            # TODO: need to check if virtual_hosted_style_request are set
+            pass
+
         return BufferedFileSimple(self, path, mode, **kwargs)
 
 
 class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
-        # self.buffer = []
-        self.closed = False
-        self.data_li = []
-        self.chunk_size = 5 * 1024
         super().__init__(fs, path, mode, **kwargs)
+        self.closed = False
+        self.buffer = []
+        self.chunk_size = 5 * 1024
 
     def read(self, length: int = -1):
         """Return bytes from the remote file
@@ -206,21 +210,20 @@ class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
         return data
 
     def write(self, data):
-        """Buffer the written data for streaming upload."""
+        """Buffer the written data in list"""
         if self.closed:
             raise ValueError("Cannot write to a closed file.")
-        self.data_li.append(data)
+        self.buffer.append(data)
         return len(data)
 
     def flush(self, force=False):
-        """Flush the buffer to the object store."""
         if self.closed:
             raise ValueError("Cannot flush a closed file.")
 
-        if self.data_li:
+        if self.buffer:
             # Convert buffer to an async iterator for upload
             def buffer_iterator():
-                for chunk in self.data_li:
+                for chunk in self.buffer:
                     yield chunk
 
             # _, path = self.split_path(self.path)
