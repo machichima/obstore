@@ -1,11 +1,19 @@
 import os
-from typing import List
+import sys
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from typing import Dict, List, Self
 
+from ._attributes import Attributes
 from ._bytes import Bytes
 from .store import ObjectStore
 
-def open(store: ObjectStore, path: str) -> ReadableFile:
-    """Open a file object from the specified location.
+if sys.version_info >= (3, 12):
+    from collections.abc import Buffer
+else:
+    from typing_extensions import Buffer
+
+def open_reader(store: ObjectStore, path: str) -> ReadableFile:
+    """Open a readable file object from the specified location.
 
     Args:
         store: The ObjectStore instance to use.
@@ -15,10 +23,10 @@ def open(store: ObjectStore, path: str) -> ReadableFile:
         ReadableFile
     """
 
-async def open_async(store: ObjectStore, path: str) -> AsyncReadableFile:
-    """Call `open` asynchronously, returning a file object with asynchronous operations.
+async def open_reader_async(store: ObjectStore, path: str) -> AsyncReadableFile:
+    """Call `open_reader` asynchronously, returning a readable file object with asynchronous operations.
 
-    Refer to the documentation for [open][obstore.open].
+    Refer to the documentation for [open_reader][obstore.open_reader].
     """
 
 class ReadableFile:
@@ -112,3 +120,94 @@ class AsyncReadableFile:
 
     async def tell(self) -> int:
         """Return the current stream position."""
+
+def open_writer(
+    store: ObjectStore,
+    path: str,
+    *,
+    attributes: Attributes | None = None,
+    buffer_size: int = 10 * 1024 * 1024,
+    tags: Dict[str, str] | None = None,
+    max_concurrency: int = 12,
+) -> WritableFile:
+    """Open a writable file object at the specified location.
+
+    Args:
+        store: The ObjectStore instance to use.
+        path: The path within ObjectStore to retrieve.
+
+    Keyword args:
+        attributes: Provide a set of `Attributes`. Defaults to `None`.
+        buffer_size: The underlying buffer size to use. Up to `buffer_size` bytes will be buffered in memory. If `buffer_size` is exceeded, data will be uploaded as a multipart upload in chunks of `buffer_size`.
+        tags: Provide tags for this object. Defaults to `None`.
+        max_concurrency: The maximum number of chunks to upload concurrently. Defaults to 12.
+
+    Returns:
+        ReadableFile
+    """
+
+def open_writer_async(
+    store: ObjectStore,
+    path: str,
+    *,
+    attributes: Attributes | None = None,
+    buffer_size: int = 10 * 1024 * 1024,
+    tags: Dict[str, str] | None = None,
+    max_concurrency: int = 12,
+) -> AsyncWritableFile:
+    """Open an **asynchronous** writable file object at the specified location.
+
+    Refer to the documentation for [open_writer][obstore.open_writer].
+    """
+
+class WritableFile(AbstractContextManager):
+    """A buffered writable file object with synchronous operations.
+
+    This implements a similar interface as a Python
+    [`BufferedWriter`][io.BufferedWriter].
+    """
+
+    def __enter__(self) -> Self: ...
+    def __exit__(self, exc_type, exc_value, traceback) -> None: ...
+    def close(self) -> None:
+        """Close the current file."""
+
+    def closed(self) -> bool:
+        """Returns `True` if the current file has already been closed.
+
+        Note that this is a method, not an attribute.
+        """
+
+    def flush(self) -> None:
+        """
+        Flushes this output stream, ensuring that all intermediately buffered contents reach their destination.
+        """
+
+    def write(self, buffer: bytes | Buffer, /) -> int:
+        """
+        Write the [bytes-like object](https://docs.python.org/3/glossary.html#term-bytes-like-object), `buffer`, and return the number of bytes written.
+        """
+
+class AsyncWritableFile(AbstractAsyncContextManager):
+    """A buffered writable file object with **asynchronous** operations."""
+
+    async def __aenter__(self) -> Self: ...
+    async def __aexit__(self, exc_type, exc_value, traceback) -> None: ...
+    async def close(self) -> None:
+        """Close the current file."""
+
+    async def closed(self) -> bool:
+        """Returns `True` if the current file has already been closed.
+
+        Note that this is an async method, not an attribute.
+        """
+
+    async def flush(self) -> None:
+        """
+        Flushes this output stream, ensuring that all intermediately buffered contents reach their destination.
+        """
+
+    async def write(self, buffer: bytes | Buffer, /) -> int:
+        """
+        Write the [bytes-like object](https://docs.python.org/3/glossary.html#term-bytes-like-object), `buffer`, and return the number of bytes written.
+        """
