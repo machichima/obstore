@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from io import BytesIO
 from typing import Any, Coroutine, Dict, List, Tuple
 
 import fsspec.asyn
@@ -187,7 +186,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 class BufferedFileWrite(fsspec.spec.AbstractBufferedFile):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.blocksize = 2048
         self._writer = open_writer(self.fs.store, self.path)
 
     def _initiate_upload(self):
@@ -223,9 +221,6 @@ class BufferedFileWrite(fsspec.spec.AbstractBufferedFile):
 class BufferedFileRead(fsspec.spec.AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
         super().__init__(fs, path, mode, **kwargs)
-        self.closed = False
-        self.buffer = []
-        self.chunk_size = 5 * 1024
 
     def read(self, length: int = -1):
         """Return bytes from the remote file
@@ -240,43 +235,3 @@ class BufferedFileRead(fsspec.spec.AbstractBufferedFile):
             data = self.fs.cat_file(self.path, self.loc, self.loc + length)
             self.loc += length
         return data
-
-    def write(self, data):
-        """Buffer the written data in list"""
-        if self.closed:
-            raise ValueError("Cannot write to a closed file.")
-        self.buffer.append(data)
-        return len(data)
-
-    def flush(self, force=False):
-        if self.closed:
-            raise ValueError("Cannot flush a closed file.")
-
-        if self.buffer:
-            # Convert buffer to an async iterator for upload
-            def buffer_iterator():
-                for chunk in self.buffer:
-                    yield chunk
-
-            # _, path = self.split_path(self.path)
-            path = self.path
-            out = self.fs.pipe_file(path, buffer_iterator())
-
-    def close(self):
-        """Finalize and upload the collected chunks."""
-        if self.closed:
-            return
-
-        self.flush()
-
-        self.closed = True
-        super().close()
-
-    def split_path(self, path: str) -> Tuple[str, str]:
-        """
-        Split bucket and file path
-        """
-        path_li = path.split("/")
-        bucket = path_li[0]
-        file_path = "/".join(path_li[1:])
-        return (bucket, file_path)
