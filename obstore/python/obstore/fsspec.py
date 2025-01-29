@@ -23,15 +23,13 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from io import BytesIO
-from typing import Tuple
+from typing import Any, Coroutine, Dict, List, Tuple
 
 import fsspec.asyn
 import fsspec.spec
 
 import obstore as obs
-from obstore.store import S3Store
-
-# from obstore.store._aws import S3Store
+from obstore import open_reader, open_writer
 
 
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
@@ -180,15 +178,49 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
     def _open(self, path, mode="rb", **kwargs):
         """Return raw bytes-mode file-like from the file-system"""
-
-        if isinstance(self.store, S3Store):
-            # TODO: need to check if virtual_hosted_style_request are set
-            pass
-
-        return BufferedFileSimple(self, path, mode, **kwargs)
+        if "w" in mode:
+            return BufferedFileWrite(self, path, mode, **kwargs)
+        if "r" in mode:
+            return BufferedFileRead(self, path, mode, **kwargs)
 
 
-class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
+class BufferedFileWrite(fsspec.spec.AbstractBufferedFile):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.blocksize = 2048
+        self._writer = open_writer(self.fs.store, self.path)
+
+    def _initiate_upload(self):
+        """
+        Called by AbstractBufferedFile flusH() on the first flush
+        """
+        self._writer = open_writer(self.fs.store, self.path)
+
+    def _upload_chunk(self, final=False):
+        """
+        Called every time fsspec flushes the write buffer
+        """
+        if self.buffer and len(self.buffer.getbuffer()) > 0:
+            self.buffer.seek(0)
+            self._writer.write(self.buffer.read())
+            # flush all the data in buffer when closing
+            if final:
+                self._writer.flush()
+            return True
+        else:
+            return False
+
+    def close(self):
+        """Close file
+        Ensure flushing the buffer
+        """
+        if self._writer.closed():
+            return
+        self._upload_chunk(final=True)
+        self._writer.close()
+
+
+class BufferedFileRead(fsspec.spec.AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
         super().__init__(fs, path, mode, **kwargs)
         self.closed = False
