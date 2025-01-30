@@ -1,3 +1,4 @@
+use std::fs::create_dir_all;
 use std::sync::Arc;
 
 use object_store::local::LocalFileSystem;
@@ -29,13 +30,21 @@ impl PyLocalStore {
 #[pymethods]
 impl PyLocalStore {
     #[new]
-    #[pyo3(signature = (prefix = None))]
-    fn py_new(prefix: Option<std::path::PathBuf>) -> PyObjectStoreResult<Self> {
+    #[pyo3(signature = (prefix = None, *, automatic_cleanup=false, mkdir=false))]
+    fn py_new(
+        prefix: Option<std::path::PathBuf>,
+        automatic_cleanup: bool,
+        mkdir: bool,
+    ) -> PyObjectStoreResult<Self> {
         let fs = if let Some(prefix) = prefix {
+            if mkdir {
+                create_dir_all(&prefix)?;
+            }
             LocalFileSystem::new_with_prefix(prefix)?
         } else {
             LocalFileSystem::new()
         };
+        let fs = fs.with_automatic_cleanup(automatic_cleanup);
         Ok(Self(Arc::new(fs)))
     }
 

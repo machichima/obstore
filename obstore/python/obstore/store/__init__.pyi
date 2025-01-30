@@ -26,7 +26,22 @@ class LocalStore:
     store = LocalStore(prefix=Path("."))
     ```
     """
-    def __init__(self, prefix: str | Path | None = None) -> None: ...
+    def __init__(
+        self,
+        prefix: str | Path | None = None,
+        *,
+        automatic_cleanup: bool = False,
+        mkdir: bool = False,
+    ) -> None:
+        """Create a new LocalStore.
+
+        Args:
+            prefix: Use the specified prefix applied to all paths. Defaults to `None`.
+
+        Keyword Args:
+            automatic_cleanup: if `True`, enables automatic cleanup of empty directories when deleting files. Defaults to False.
+            mkdir: if `True` and `prefix` is not `None`, the directory at `prefix` will attempt to be created. Note that this root directory will not be cleaned up, even if `automatic_cleanup` is `True`.
+        """
     def __repr__(self) -> str: ...
     @classmethod
     def from_url(cls, url: str) -> LocalStore:
