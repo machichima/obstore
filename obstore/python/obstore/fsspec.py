@@ -31,7 +31,7 @@ import fsspec.asyn
 import fsspec.spec
 
 import obstore as obs
-from obstore import open_reader, open_writer
+from obstore import open_writer
 
 
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
@@ -199,7 +199,10 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
     def _open(self, path, mode="rb", **kwargs):
         """Return raw bytes-mode file-like from the file-system"""
-        assert mode in ("rb", "wb"), f"Only 'rb' and 'wb' mode is currently supported, got: {mode}"
+        assert mode in (
+            "rb",
+            "wb",
+        ), f"Only 'rb' and 'wb' mode is currently supported, got: {mode}"
         if mode == "wb":
             return BufferedFileWrite(self, path, mode, **kwargs)
         if mode == "rb":
