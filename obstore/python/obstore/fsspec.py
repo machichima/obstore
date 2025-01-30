@@ -149,17 +149,36 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
                 f.write(buffer)
 
     async def _info(self, path, **kwargs):
-        head = await obs.head_async(self.store, path)
-        return {
-            # Required of `info`: (?)
-            "name": head["path"],
-            "size": head["size"],
-            "type": "directory" if head["path"].endswith("/") else "file",
-            # Implementation-specific keys
-            "e_tag": head["e_tag"],
-            "last_modified": head["last_modified"],
-            "version": head["version"],
-        }
+        try:
+            head = await obs.head_async(self.store, path)
+            return {
+                # Required of `info`: (?)
+                "name": head["path"],
+                "size": head["size"],
+                "type": "directory" if head["path"].endswith("/") else "file",
+                # Implementation-specific keys
+                "e_tag": head["e_tag"],
+                "last_modified": head["last_modified"],
+                "version": head["version"],
+            }
+        except FileNotFoundError:
+            # try ls, refer to the info implementation in fsspec
+            # https://github.com/fsspec/filesystem_spec/blob/08d1e494db177d90ccc77e5f154d5fbb34657b13/fsspec/spec.py#L643-L675
+            parent = self._parent(path)
+            out = await self._ls(parent)
+            out = [o for o in out if o["name"].rstrip("/") == path]
+            if out:
+                return out[0]
+            out = await self._ls(path)
+            out1 = [o for o in out if o["name"].rstrip("/") == path]
+            if len(out1) == 1:
+                if "size" not in out1[0]:
+                    out1[0]["size"] = None
+                return out1[0]
+            elif len(out1) > 1 or out:
+                return {"name": path, "size": 0, "type": "directory"}
+            else:
+                raise FileNotFoundError(path)
 
     async def _ls(self, path, detail=True, **kwargs):
         result = await obs.list_with_delimiter_async(self.store, path)
