@@ -122,7 +122,7 @@ impl PyAzureStore {
 
     #[classmethod]
     #[pyo3(signature = (url, *, config=None, client_options=None, retry_config=None, **kwargs))]
-    fn from_url(
+    pub(crate) fn from_url(
         _cls: &Bound<PyType>,
         url: PyUrl,
         config: Option<PyAzureConfig>,
@@ -199,6 +199,12 @@ impl<'py> FromPyObject<'py> for PyAzureConfigKey {
     }
 }
 
+impl AsRef<str> for PyAzureConfigKey {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
 impl<'py> IntoPyObject<'py> for PyAzureConfigKey {
     type Target = PyString;
     type Output = Bound<'py, PyString>;
@@ -209,8 +215,16 @@ impl<'py> IntoPyObject<'py> for PyAzureConfigKey {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, FromPyObject, IntoPyObject)]
+#[derive(Clone, Debug, PartialEq, Eq, IntoPyObject)]
 pub struct PyAzureConfig(HashMap<PyAzureConfigKey, PyConfigValue>);
+
+// Note: we manually impl FromPyObject instead of deriving it so that we can raise an
+// UnknownConfigurationKeyError instead of a `TypeError` on invalid config keys.
+impl<'py> FromPyObject<'py> for PyAzureConfig {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Self(ob.extract()?))
+    }
+}
 
 impl PyAzureConfig {
     fn apply_config(self, mut builder: MicrosoftAzureBuilder) -> MicrosoftAzureBuilder {

@@ -7,9 +7,9 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple, PyType};
 use pyo3::{intern, IntoPyObjectExt};
-use url::Url;
 
 use crate::error::PyObjectStoreResult;
+use crate::PyUrl;
 
 #[derive(Clone, Debug)]
 struct LocalConfig {
@@ -79,13 +79,13 @@ impl PyLocalStore {
 
     #[classmethod]
     #[pyo3(signature = (url, *, automatic_cleanup=false, mkdir=false))]
-    fn from_url(
+    pub(crate) fn from_url(
         _cls: &Bound<PyType>,
-        url: &str,
+        url: PyUrl,
         automatic_cleanup: bool,
         mkdir: bool,
     ) -> PyObjectStoreResult<Self> {
-        let url = Url::parse(url).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let url = url.into_inner();
         let (scheme, path) = ObjectStoreScheme::parse(&url).map_err(object_store::Error::from)?;
 
         if !matches!(scheme, ObjectStoreScheme::Local) {

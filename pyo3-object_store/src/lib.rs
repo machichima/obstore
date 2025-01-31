@@ -14,6 +14,7 @@ mod memory;
 mod path;
 mod prefix;
 mod retry;
+mod simple;
 mod store;
 mod url;
 
@@ -27,5 +28,6 @@ pub use http::PyHttpStore;
 pub use local::PyLocalStore;
 pub use memory::PyMemoryStore;
 pub use prefix::MaybePrefixedStore;
+pub use simple::from_url;
 pub use store::PyObjectStore;
 pub use url::PyUrl;

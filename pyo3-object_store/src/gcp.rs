@@ -122,7 +122,7 @@ impl PyGCSStore {
 
     #[classmethod]
     #[pyo3(signature = (url, *, config=None, client_options=None, retry_config=None, **kwargs))]
-    fn from_url(
+    pub(crate) fn from_url(
         _cls: &Bound<PyType>,
         url: PyUrl,
         config: Option<PyGoogleConfig>,
@@ -197,6 +197,12 @@ impl<'py> FromPyObject<'py> for PyGoogleConfigKey {
     }
 }
 
+impl AsRef<str> for PyGoogleConfigKey {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
 impl<'py> IntoPyObject<'py> for PyGoogleConfigKey {
     type Target = PyString;
     type Output = Bound<'py, PyString>;
@@ -207,8 +213,16 @@ impl<'py> IntoPyObject<'py> for PyGoogleConfigKey {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, FromPyObject, IntoPyObject)]
+#[derive(Clone, Debug, PartialEq, Eq, IntoPyObject)]
 pub struct PyGoogleConfig(HashMap<PyGoogleConfigKey, PyConfigValue>);
+
+// Note: we manually impl FromPyObject instead of deriving it so that we can raise an
+// UnknownConfigurationKeyError instead of a `TypeError` on invalid config keys.
+impl<'py> FromPyObject<'py> for PyGoogleConfig {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(Self(ob.extract()?))
+    }
+}
 
 impl PyGoogleConfig {
     fn apply_config(self, mut builder: GoogleCloudStorageBuilder) -> GoogleCloudStorageBuilder {

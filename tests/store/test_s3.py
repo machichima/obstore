@@ -5,7 +5,7 @@ import pytest
 
 import obstore as obs
 from obstore.exceptions import ObstoreError
-from obstore.store import S3Store
+from obstore.store import S3Store, from_url
 
 
 @pytest.mark.asyncio
@@ -36,6 +36,16 @@ def test_error_overlapping_config_kwargs():
 
     with pytest.raises(ObstoreError, match="Duplicate key"):
         S3Store("bucket", config={"AWS_SKIP_SIGNATURE": True}, skip_signature=True)
+
+
+@pytest.mark.asyncio
+async def test_from_url():
+    store = from_url(
+        "s3://ookla-open-data/parquet/performance/type=fixed/year=2024/quarter=1",
+        region="us-west-2",
+        skip_signature=True,
+    )
+    _meta = await obs.head_async(store, "2024-01-01_performance_fixed_tiles.parquet")
 
 
 def test_pickle():
