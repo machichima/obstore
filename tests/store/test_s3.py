@@ -1,3 +1,6 @@
+import pickle
+
+# import cloudpickle
 import pytest
 
 import obstore as obs
@@ -33,3 +36,13 @@ def test_error_overlapping_config_kwargs():
 
     with pytest.raises(ObstoreError, match="Duplicate key"):
         S3Store("bucket", config={"AWS_SKIP_SIGNATURE": True}, skip_signature=True)
+
+
+def test_pickle():
+    store = S3Store(
+        "ookla-open-data",
+        region="us-west-2",
+        skip_signature=True,
+    )
+    restored = pickle.loads(pickle.dumps(store))
+    _objects = next(obs.list(restored))
