@@ -32,6 +32,7 @@ import fsspec.spec
 
 import obstore as obs
 from obstore import open_writer
+from obstore.store import AzureStore, GCSStore, S3Store
 
 
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
@@ -81,6 +82,32 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         super().__init__(
             *args, asynchronous=asynchronous, loop=loop, batch_size=batch_size
         )
+
+    def _split_path(self, path: str) -> Tuple[str, str]:
+        """
+        Split bucket and file path
+
+        Args:
+            path  (str): Input path, like `s3://mybucket/path/to/file`
+
+        Examples:
+            >>> split_path("s3://mybucket/path/to/file")
+            ['mybucket', 'path/to/file']
+        """
+
+        store_with_bucket = (S3Store, GCSStore, AzureStore)
+
+        if not isinstance(self.store, store_with_bucket):
+            # no bucket name in path
+            return "", path
+
+        if "/" not in path:
+            return path, ""
+        else:
+            path_li = path.split("/")
+            bucket = path_li[0]
+            file_path = "/".join(path_li[1:])
+            return (bucket, file_path)
 
     async def _rm_file(self, path, **kwargs):
         return await obs.delete_async(self.store, path)
@@ -197,12 +224,15 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         else:
             return sorted([object["path"] for object in objects] + prefs)
 
-    def _open(self, path, mode="rb", **kwargs):
+    def _open(self, path: str, mode="rb", **kwargs):
         """Return raw bytes-mode file-like from the file-system"""
         assert mode in (
             "rb",
             "wb",
         ), f"Only 'rb' and 'wb' mode is currently supported, got: {mode}"
+
+        _, path = self._split_path(path)
+
         if mode == "wb":
             return BufferedFileWrite(self, path, mode, **kwargs)
         if mode == "rb":
