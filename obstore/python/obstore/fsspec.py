@@ -24,12 +24,14 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from functools import lru_cache
 from typing import Any, Coroutine, Dict, List, Tuple
 
 import fsspec.asyn
 import fsspec.spec
 
 import obstore as obs
+from obstore.store import S3Store, GCSStore, AzureStore
 
 
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
@@ -45,6 +47,9 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         self,
         store: obs.store.ObjectStore,
         *args,
+        config: dict[str, Any] = {},
+        client_options: dict[str, Any] = {},
+        retry_config: dict[str, Any] = {},
         asynchronous: bool = False,
         loop=None,
         batch_size: int | None = None,
@@ -76,8 +81,51 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         """
 
         self.store = store
+
+        self.config = config
+        self.client_options = client_options
+        self.retry_config = retry_config
+
         super().__init__(
             *args, asynchronous=asynchronous, loop=loop, batch_size=batch_size
+        )
+
+    def _split_path(self, path: str) -> Tuple[str, str]:
+        """
+        Split bucket and file path
+
+        Args:
+            path  (str): Input path, like `s3://mybucket/path/to/file`
+
+        Examples:
+            >>> split_path("s3://mybucket/path/to/file")
+            ['mybucket', 'path/to/file']
+        """
+
+        store_with_bucket = (S3Store, GCSStore, AzureStore)
+
+        if (
+            not isinstance(self.store, store_with_bucket)  # instance
+            and not self.store in store_with_bucket  # not instantiation
+        ):
+            # no bucket name in path
+            return "", path
+
+        if "/" not in path:
+            return path, ""
+        else:
+            path_li = path.split("/")
+            bucket = path_li[0]
+            file_path = "/".join(path_li[1:])
+            return (bucket, file_path)
+
+    @lru_cache(maxsize=10)
+    def _construct_store(self, bucket: str):
+        return self.store.from_url(
+            f"{self.protocol}://{bucket}",
+            **self.config,
+            client_options=self.client_options,
+            retry_config=self.retry_config if self.retry_config else None,
         )
 
     async def _rm_file(self, path, **kwargs):
@@ -90,11 +138,14 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         return await obs.put_async(self.store, path, value)
 
     async def _cat_file(self, path, start=None, end=None, **kwargs):
-        if start is None and end is None:
-            resp = await obs.get_async(self.store, path)
-            return await resp.bytes_async()
+        bucket, path = self._split_path(path)
+        store = self._construct_store(bucket)
 
-        range_bytes = await obs.get_range_async(self.store, path, start=start, end=end)
+        if start is None and end is None:
+            resp = await obs.get_async(store, path)
+            return (await resp.bytes_async()).to_bytes()
+
+        range_bytes = await obs.get_range_async(store, path, start=start, end=end)
         return range_bytes.to_bytes()
 
     async def _cat_ranges(
