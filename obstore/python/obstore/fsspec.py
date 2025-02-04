@@ -31,8 +31,7 @@ import fsspec.asyn
 import fsspec.spec
 
 import obstore as obs
-from obstore.store import S3Store, GCSStore, AzureStore, from_url
-
+from obstore.store import from_url
 
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     """An fsspec implementation based on a obstore Store.
@@ -115,7 +114,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
     @lru_cache(maxsize=10)
     def _construct_store(self, bucket: str):
-        # from obstore.store import from_url
         return from_url(
             url=f"{self.protocol}://{bucket}",
             config=self.config,
@@ -269,3 +267,13 @@ class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
             data = self.fs.cat_file(self.path, self.loc, self.loc + length)
             self.loc += length
         return data
+
+
+class S3FsspecStore(AsyncFsspecStore):
+    protocol = "s3"
+
+class GCSFsspecStore(AsyncFsspecStore):
+    protocol = "gs"
+
+class AzureFsspecStore(AsyncFsspecStore):
+    protocol = "abfs"
