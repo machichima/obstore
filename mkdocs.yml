@@ -48,11 +48,14 @@ nav:
       - api/exceptions.md
       - api/file.md
       - fsspec Integration: api/fsspec.md
+  - integrations.md
+  - performance.md
   - Troubleshooting:
       - AWS: troubleshooting/aws.md
   - Advanced:
       - advanced/pickle.md
   - Developer Docs:
+      - dev/DEVELOP.md
       - dev/functional-api.md
       - dev/pickle.md
   - CHANGELOG.md
