@@ -226,10 +226,8 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
     def _open(self, path: str, mode="rb", **kwargs):
         """Return raw bytes-mode file-like from the file-system"""
-        assert mode in (
-            "rb",
-            "wb",
-        ), f"Only 'rb' and 'wb' mode is currently supported, got: {mode}"
+        if mode not in {"rb", "wb"}:
+            raise ValueError(f"Only 'rb' and 'wb' mode is currently supported, got: {mode}")
 
         _, path = self._split_path(path)
 
