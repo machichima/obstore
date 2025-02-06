@@ -104,6 +104,12 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             # no bucket name in path
             return "", path
 
+        if path.startswith(self.protocol + "://"):
+            path = path[len(self.protocol) + 3 :]
+        elif path.startswith(self.protocol + "::"):
+            path = path[len(self.protocol) + 2 :]
+        path = path.rstrip("/")
+
         if "/" not in path:
             return path, ""
         else:
