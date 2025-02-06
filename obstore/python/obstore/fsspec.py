@@ -240,7 +240,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 class BufferedFileWrite(fsspec.spec.AbstractBufferedFile):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._writer = open_writer(self.fs.store, self.path)
 
     def _initiate_upload(self):
         """
@@ -270,6 +269,7 @@ class BufferedFileWrite(fsspec.spec.AbstractBufferedFile):
             return
         self._upload_chunk(final=True)
         self._writer.close()
+        self.closed = True
 
 
 class BufferedFileRead(fsspec.spec.AbstractBufferedFile):
