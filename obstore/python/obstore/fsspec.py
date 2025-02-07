@@ -22,6 +22,7 @@ integration.
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
 import asyncio
 from collections import defaultdict
 from functools import lru_cache
@@ -104,11 +105,11 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             # no bucket name in path
             return "", path
 
-        if path.startswith(self.protocol + "://"):
-            path = path[len(self.protocol) + 3 :]
-        elif path.startswith(self.protocol + "::"):
-            path = path[len(self.protocol) + 2 :]
-        path = path.rstrip("/")
+        res = urlparse(path)
+        if res.scheme:
+            if res.scheme != self.protocol:
+                raise ValueError(f"Expect protocol to be {self.protocol}. Got {res.schema}")
+            path = res.netloc + res.path
 
         if "/" not in path:
             return path, ""
