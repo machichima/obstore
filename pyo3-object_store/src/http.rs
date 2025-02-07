@@ -17,7 +17,7 @@ struct HTTPConfig {
 
 impl HTTPConfig {
     fn __getnewargs_ex__(&self, py: Python) -> PyResult<PyObject> {
-        let args = PyTuple::new(py, vec![self.url.clone().into_pyobject(py)?])?.into_py_any(py)?;
+        let args = PyTuple::new(py, vec![self.url.clone()])?.into_py_any(py)?;
         let kwargs = PyDict::new(py);
 
         if let Some(client_options) = &self.client_options {
@@ -32,7 +32,7 @@ impl HTTPConfig {
 }
 
 /// A Python-facing wrapper around a [`HttpStore`].
-#[pyclass(name = "HTTPStore", frozen)]
+#[pyclass(name = "HTTPStore", module = "obstore.store", frozen)]
 pub struct PyHttpStore {
     // Note: we don't need to wrap this in a MaybePrefixedStore because the HttpStore manages its
     // own prefix.
@@ -97,5 +97,20 @@ impl PyHttpStore {
 
     fn __repr__(&self) -> String {
         format!("HTTPStore(\"{}\")", &self.config.url.as_ref())
+    }
+
+    #[getter]
+    fn url(&self) -> &PyUrl {
+        &self.config.url
+    }
+
+    #[getter]
+    fn client_options(&self) -> Option<PyClientOptions> {
+        self.config.client_options.clone()
+    }
+
+    #[getter]
+    fn retry_config(&self) -> Option<PyRetryConfig> {
+        self.config.retry_config.clone()
     }
 }

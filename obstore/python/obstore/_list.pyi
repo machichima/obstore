@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Generic, List, Literal, Self, TypedDict, TypeVar, overload
 
-from arro3.core import RecordBatch
+from arro3.core import RecordBatch, Table
 
 from .store import ObjectStore
 
@@ -26,7 +26,7 @@ class ObjectMeta(TypedDict):
     version: str | None
     """A version indicator for this object"""
 
-class ListResult(TypedDict):
+class ListResult(TypedDict, Generic[ListChunkType]):
     """
     Result of a list call that includes objects, prefixes (directories) and a token for
     the next set of results. Individual result sets may be limited to 1,000 objects
@@ -36,12 +36,18 @@ class ListResult(TypedDict):
     common_prefixes: List[str]
     """Prefixes that are common (like directories)"""
 
-    objects: List[ObjectMeta]
+    objects: ListChunkType
     """Object metadata for the listing"""
 
-ChunkType = TypeVar("ChunkType", List[ObjectMeta], RecordBatch)
+ListChunkType = TypeVar("ListChunkType", List[ObjectMeta], RecordBatch, Table)
+"""The data structure used for holding
 
-class ListStream(Generic[ChunkType]):
+By default, listing APIs return a `list` of [`ObjectMeta`][obstore.ObjectMeta]. However
+for improved performance when listing large buckets, you can pass `return_arrow=True`.
+Then an Arrow `RecordBatch` will be returned instead.
+"""
+
+class ListStream(Generic[ListChunkType]):
     """
     A stream of [ObjectMeta][obstore.ObjectMeta] that can be polled in a sync or
     async fashion.
@@ -52,24 +58,24 @@ class ListStream(Generic[ChunkType]):
     def __iter__(self) -> Self:
         """Return `Self` as an async iterator."""
 
-    async def collect_async(self) -> ChunkType:
+    async def collect_async(self) -> ListChunkType:
         """Collect all remaining ObjectMeta objects in the stream.
 
         This ignores the `chunk_size` parameter from the `list` call and collects all
         remaining data into a single chunk.
         """
 
-    def collect(self) -> ChunkType:
+    def collect(self) -> ListChunkType:
         """Collect all remaining ObjectMeta objects in the stream.
 
         This ignores the `chunk_size` parameter from the `list` call and collects all
         remaining data into a single chunk.
         """
 
-    async def __anext__(self) -> ChunkType:
+    async def __anext__(self) -> ListChunkType:
         """Return the next chunk of ObjectMeta in the stream."""
 
-    def __next__(self) -> ChunkType:
+    def __next__(self) -> ListChunkType:
         """Return the next chunk of ObjectMeta in the stream."""
 
 @overload
@@ -188,15 +194,37 @@ def list(
         A ListStream, which you can iterate through to access list results.
     """
 
-def list_with_delimiter(store: ObjectStore, prefix: str | None = None) -> ListResult:
+@overload
+def list_with_delimiter(
+    store: ObjectStore,
+    prefix: str | None = None,
+    *,
+    return_arrow: Literal[True],
+) -> ListResult[Table]: ...
+@overload
+def list_with_delimiter(
+    store: ObjectStore,
+    prefix: str | None = None,
+    *,
+    return_arrow: Literal[False] = False,
+) -> ListResult[List[ObjectMeta]]: ...
+def list_with_delimiter(
+    store: ObjectStore,
+    prefix: str | None = None,
+    *,
+    return_arrow: bool = False,
+) -> ListResult[Table] | ListResult[List[ObjectMeta]]:
     """
     List objects with the given prefix and an implementation specific
     delimiter. Returns common prefixes (directories) in addition to object
     metadata.
 
     Prefixes are evaluated on a path segment basis, i.e. `foo/bar/` is a prefix of
-    `foo/bar/x` but not of `foo/bar_baz/x`. List is not recursive, i.e. `foo/bar/more/x`
-    will not be included.
+    `foo/bar/x` but not of `foo/bar_baz/x`. This list is not recursive, i.e. `foo/bar/more/x` will **not** be included.
+
+    !!! note
+        Any prefix supplied to this `prefix` parameter will **not** be stripped off the
+        paths in the result.
 
     Args:
         store: The ObjectStore instance to use.
@@ -206,9 +234,26 @@ def list_with_delimiter(store: ObjectStore, prefix: str | None = None) -> ListRe
         ListResult
     """
 
+@overload
 async def list_with_delimiter_async(
-    store: ObjectStore, prefix: str | None = None
-) -> ListResult:
+    store: ObjectStore,
+    prefix: str | None = None,
+    *,
+    return_arrow: Literal[True],
+) -> ListResult[Table]: ...
+@overload
+async def list_with_delimiter_async(
+    store: ObjectStore,
+    prefix: str | None = None,
+    *,
+    return_arrow: Literal[False] = False,
+) -> ListResult[List[ObjectMeta]]: ...
+async def list_with_delimiter_async(
+    store: ObjectStore,
+    prefix: str | None = None,
+    *,
+    return_arrow: bool = False,
+) -> ListResult[Table] | ListResult[List[ObjectMeta]]:
     """Call `list_with_delimiter` asynchronously.
 
     Refer to the documentation for

@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 use pyo3::{intern, IntoPyObjectExt};
 
-use crate::error::ObstoreError;
+use crate::error::GenericError;
 use crate::retry::PyRetryConfig;
 use crate::url::PyUrl;
 use crate::{
@@ -28,7 +28,7 @@ pub fn from_url(
     retry_config: Option<PyRetryConfig>,
     kwargs: Option<Bound<PyAny>>,
 ) -> PyObjectStoreResult<PyObject> {
-    let (scheme, _) = ObjectStoreScheme::parse(&url.as_ref()).map_err(object_store::Error::from)?;
+    let (scheme, _) = ObjectStoreScheme::parse(url.as_ref()).map_err(object_store::Error::from)?;
     match scheme {
         ObjectStoreScheme::AmazonS3 => {
             let store = PyS3Store::from_url(
@@ -39,7 +39,7 @@ pub fn from_url(
                 retry_config,
                 kwargs.map(|x| x.extract()).transpose()?,
             )?;
-            Ok(store.into_pyobject(py)?.into_py_any(py)?)
+            Ok(store.into_py_any(py)?)
         }
         ObjectStoreScheme::GoogleCloudStorage => {
             let store = PyGCSStore::from_url(
@@ -50,7 +50,7 @@ pub fn from_url(
                 retry_config,
                 kwargs.map(|x| x.extract()).transpose()?,
             )?;
-            Ok(store.into_pyobject(py)?.into_py_any(py)?)
+            Ok(store.into_py_any(py)?)
         }
         ObjectStoreScheme::MicrosoftAzure => {
             let store = PyAzureStore::from_url(
@@ -61,7 +61,7 @@ pub fn from_url(
                 retry_config,
                 kwargs.map(|x| x.extract()).transpose()?,
             )?;
-            Ok(store.into_pyobject(py)?.into_py_any(py)?)
+            Ok(store.into_py_any(py)?)
         }
         ObjectStoreScheme::Http => {
             raise_if_config_passed(config, kwargs, "http")?;
@@ -71,7 +71,7 @@ pub fn from_url(
                 client_options,
                 retry_config,
             )?;
-            Ok(store.into_pyobject(py)?.into_py_any(py)?)
+            Ok(store.into_py_any(py)?)
         }
         ObjectStoreScheme::Local => {
             let mut automatic_cleanup = false;
@@ -92,16 +92,14 @@ pub fn from_url(
                 automatic_cleanup,
                 mkdir,
             )?;
-            Ok(store.into_pyobject(py)?.into_py_any(py)?)
+            Ok(store.into_py_any(py)?)
         }
         ObjectStoreScheme::Memory => {
             raise_if_config_passed(config, kwargs, "memory")?;
             let store: PyMemoryStore = Arc::new(InMemory::new()).into();
-            Ok(store.into_pyobject(py)?.into_py_any(py)?)
+            Ok(store.into_py_any(py)?)
         }
-        scheme => {
-            return Err(ObstoreError::new_err(format!("Unknown URL scheme {:?}", scheme,)).into());
-        }
+        scheme => Err(GenericError::new_err(format!("Unknown URL scheme {:?}", scheme,)).into()),
     }
 }
 
@@ -111,7 +109,7 @@ fn raise_if_config_passed(
     scheme: &str,
 ) -> PyObjectStoreResult<()> {
     if config.is_some() || kwargs.is_some() {
-        return Err(ObstoreError::new_err(format!(
+        return Err(GenericError::new_err(format!(
             "Cannot pass config or keyword parameters for scheme {:?}",
             scheme,
         ))

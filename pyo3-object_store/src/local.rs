@@ -20,8 +20,7 @@ struct LocalConfig {
 
 impl LocalConfig {
     fn __getnewargs_ex__(&self, py: Python) -> PyResult<PyObject> {
-        let args =
-            PyTuple::new(py, vec![self.prefix.clone().into_pyobject(py)?])?.into_py_any(py)?;
+        let args = PyTuple::new(py, vec![self.prefix.clone()])?.into_py_any(py)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item(intern!(py, "automatic_cleanup"), self.automatic_cleanup)?;
         kwargs.set_item(intern!(py, "mkdir"), self.mkdir)?;
@@ -30,7 +29,7 @@ impl LocalConfig {
 }
 
 /// A Python-facing wrapper around a [`LocalFileSystem`].
-#[pyclass(name = "LocalStore", frozen)]
+#[pyclass(name = "LocalStore", module = "obstore.store", frozen)]
 pub struct PyLocalStore {
     store: Arc<LocalFileSystem>,
     config: LocalConfig,
@@ -60,7 +59,7 @@ impl PyLocalStore {
     ) -> PyObjectStoreResult<Self> {
         let fs = if let Some(prefix) = &prefix {
             if mkdir {
-                create_dir_all(&prefix)?;
+                create_dir_all(prefix)?;
             }
             LocalFileSystem::new_with_prefix(prefix)?
         } else {
@@ -109,6 +108,21 @@ impl PyLocalStore {
             format!("LocalStore(\"{}\")", prefix.display())
         } else {
             "LocalStore".to_string()
+        }
+    }
+
+    #[getter]
+    fn prefix(&self, py: Python) -> PyResult<PyObject> {
+        // Note: returning a std::path::Path or std::path::PathBuf converts back to a Python _str_
+        // not a Python _pathlib.Path_.
+        // So we manually convert to a pathlib.Path
+        if let Some(prefix) = &self.config.prefix {
+            let pathlib_mod = py.import(intern!(py, "pathlib"))?;
+            let path_object =
+                pathlib_mod.call_method1(intern!(py, "Path"), PyTuple::new(py, vec![prefix])?)?;
+            path_object.into_py_any(py)
+        } else {
+            Ok(py.None())
         }
     }
 }

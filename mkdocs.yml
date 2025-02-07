@@ -25,6 +25,8 @@ nav:
   - cookbook.md
   - Examples:
       - examples/fastapi.md
+      - examples/minio.md
+      - examples/tqdm.md
   - API Reference:
       - obstore.store:
           - api/store/index.md
@@ -48,9 +50,15 @@ nav:
       - api/exceptions.md
       - api/file.md
       - fsspec Integration: api/fsspec.md
+  - integrations.md
+  - performance.md
+  - Troubleshooting:
+      - AWS: troubleshooting/aws.md
   - Advanced:
       - advanced/pickle.md
   - Developer Docs:
+      - dev/DEVELOP.md
+      - dev/functional-api.md
       - dev/pickle.md
   - CHANGELOG.md
 

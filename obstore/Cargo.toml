@@ -1,6 +1,6 @@
 [package]
 name = "obstore"
-version = "0.4.0-beta.1"
+version = "0.4.0-beta.4"
 authors = { workspace = true }
 edition = { workspace = true }
 description = "The simplest, highest-throughput interface to Amazon S3, Google Cloud Storage, Azure Blob Storage, and S3-compliant APIs like Cloudflare R2."
@@ -30,7 +30,7 @@ pyo3-arrow = "0.6"
 pyo3-async-runtimes = { workspace = true, features = ["tokio-runtime"] }
 pyo3-bytes = { path = "../pyo3-bytes" }
 pyo3-file = { workspace = true }
-pyo3-object_store = { path = "../pyo3-object_store" }
+pyo3-object_store = { path = "../pyo3-object_store", features = ["aws-config"] }
 tokio = { workspace = true, features = [
     "macros",
     "rt",
