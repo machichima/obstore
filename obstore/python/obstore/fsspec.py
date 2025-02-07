@@ -22,17 +22,38 @@ integration.
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
 import asyncio
 from collections import defaultdict
 from functools import lru_cache
-from typing import Any, Coroutine, Dict, List, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Coroutine,
+    Dict,
+    List,
+    Tuple,
+)
+from urllib.parse import urlparse
 
 import fsspec.asyn
 import fsspec.spec
 
 import obstore as obs
+from obstore import Bytes
 from obstore.store import from_url
+
+if TYPE_CHECKING:
+    from obstore.store import (
+        AzureConfig,
+        AzureConfigInput,
+        ClientConfig,
+        GCSConfig,
+        GCSConfigInput,
+        RetryConfig,
+        S3Config,
+        S3ConfigInput,
+    )
+
 
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     """An fsspec implementation based on a obstore Store.
@@ -42,13 +63,30 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     """
 
     cachable = False
+    config: (
+        S3Config
+        | S3ConfigInput
+        | GCSConfig
+        | GCSConfigInput
+        | AzureConfig
+        | AzureConfigInput
+        | None
+    )
+    client_options: ClientConfig | None
+    retry_config: RetryConfig | None
 
     def __init__(
         self,
         *args,
-        config: dict[str, Any] = {},
-        client_options: dict[str, Any] = {},
-        retry_config: dict[str, Any] = {},
+        config: S3Config
+        | S3ConfigInput
+        | GCSConfig
+        | GCSConfigInput
+        | AzureConfig
+        | AzureConfigInput
+        | None = None,
+        client_options: ClientConfig | None = None,
+        retry_config: RetryConfig | None = None,
         asynchronous: bool = False,
         loop: Any = None,
         batch_size: int | None = None,
@@ -108,7 +146,9 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         res = urlparse(path)
         if res.scheme:
             if res.scheme != self.protocol:
-                raise ValueError(f"Expect protocol to be {self.protocol}. Got {res.schema}")
+                raise ValueError(
+                    f"Expect protocol to be {self.protocol}. Got {res.scheme}"
+                )
             path = res.netloc + res.path
 
         if "/" not in path:
@@ -138,7 +178,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         store = self._construct_store(bucket)
         return await obs.copy_async(store, path1, path2)
 
-    async def _pipe_file(self, path, value, **kwargs):
+    async def _pipe_file(self, path, value, mode="overwrite", **kwargs):
         bucket, path = self._split_path(path)
         store = self._construct_store(bucket)
         return await obs.put_async(store, path, value)
@@ -178,7 +218,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         for idx, (path, start, end) in enumerate(zip(paths, starts, ends)):
             per_file_requests[path].append((start, end, idx))
 
-        futs: List[Coroutine[Any, Any, List[bytes]]] = []
+        futs: List[Coroutine[Any, Any, List[Bytes]]] = []
         for path, ranges in per_file_requests.items():
             offsets = [r[0] for r in ranges]
             ends = [r[1] for r in ranges]
@@ -196,7 +236,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
         return output_buffers
 
-    async def _put_file(self, lpath, rpath, **kwargs):
+    async def _put_file(self, lpath, rpath, mode="overwrite", **kwargs):
         bucket, path = self._split_path(path)
         store = self._construct_store(bucket)
         with open(lpath, "rb") as f:
@@ -246,7 +286,15 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         else:
             return sorted([object["path"] for object in objects] + prefs)
 
-    def _open(self, path, mode="rb", **kwargs):
+    def _open(
+        self,
+        path,
+        mode="rb",
+        block_size=None,
+        autocommit=True,
+        cache_options=None,
+        **kwargs,
+    ):
         """Return raw bytes-mode file-like from the file-system"""
         bucket, path = self._split_path(path)
         store = self._construct_store(bucket)
@@ -279,8 +327,10 @@ class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
 class S3FsspecStore(AsyncFsspecStore):
     protocol = "s3"
 
+
 class GCSFsspecStore(AsyncFsspecStore):
     protocol = "gs"
+
 
 class AzureFsspecStore(AsyncFsspecStore):
     protocol = "abfs"
