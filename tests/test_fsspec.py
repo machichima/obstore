@@ -27,9 +27,16 @@ def test_register():
         fs_instance, AsyncFsspecStore
     ), "Registered class should be instantiable"
 
-    # Optionally, test multiple registrations
-    register(["gcs", "abfs"])
-    assert issubclass(fsspec.get_filesystem_class("gcs"), AsyncFsspecStore)
+    # test register asynchronous
+    register("gcs", asynchronous=True)  # Register the "s3" protocol dynamically
+    fs_class = fsspec.get_filesystem_class("gcs")
+    assert (
+        fs_class.asynchronous == True
+    ), "Registered class should be asynchronous"
+
+    # test multiple registrations
+    register(["file", "abfs"])
+    assert issubclass(fsspec.get_filesystem_class("file"), AsyncFsspecStore)
     assert issubclass(fsspec.get_filesystem_class("abfs"), AsyncFsspecStore)
 
 
