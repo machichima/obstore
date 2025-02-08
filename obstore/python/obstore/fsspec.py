@@ -37,7 +37,6 @@ from urllib.parse import urlparse
 
 import fsspec.asyn
 import fsspec.spec
-from python.obstore import Bytes
 
 import obstore as obs
 from obstore import Bytes
