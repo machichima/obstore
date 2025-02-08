@@ -369,7 +369,26 @@ def register(protocol: str | list[str]):
        - This avoids modifying the original AsyncFsspecStore class.
     """
 
+    # Ensure protocol is of type str or list
+    if not isinstance(protocol, (str, list)):
+        raise TypeError(
+            f"Protocol must be a string or a list of strings, got {type(protocol)}"
+        )
+
+    # Ensure protocol is not None or empty
+    if not protocol:
+        raise ValueError(
+            "Protocol must be a non-empty string or a list of non-empty strings."
+        )
+
     if isinstance(protocol, list):
+        # Ensure all elements are strings
+        if not all(isinstance(p, str) for p in protocol):
+            raise TypeError("All protocols in the list must be strings.")
+        # Ensure no empty strings in the list
+        if not all(p for p in protocol):
+            raise ValueError("Protocol names in the list must be non-empty strings.")
+
         for p in protocol:
             register(p)
         return
