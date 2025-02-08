@@ -1,11 +1,54 @@
 import os
 
+import fsspec
 import pyarrow.parquet as pq
 import pytest
 
 import obstore as obs
-from obstore.fsspec import AsyncFsspecStore
+from obstore.fsspec import AsyncFsspecStore, register
+from tests.conftest import TEST_BUCKET_NAME
 
+
+def test_register():
+    """Test that register properly creates and registers a subclass for a given protocol."""
+    register("s3")  # Register the "s3" protocol dynamically
+    fs_class = fsspec.get_filesystem_class("s3")
+
+    assert issubclass(
+        fs_class, AsyncFsspecStore
+    ), "Registered class should be a subclass of AsyncFsspecStore"
+    assert (
+        fs_class.protocol == "s3"
+    ), "Registered class should have the correct protocol"
+
+    # Ensure a new instance of the registered store can be created
+    fs_instance = fs_class()
+    assert isinstance(
+        fs_instance, AsyncFsspecStore
+    ), "Registered class should be instantiable"
+
+    # Optionally, test multiple registrations
+    register(["gcs", "abfs"])
+    assert issubclass(fsspec.get_filesystem_class("gcs"), AsyncFsspecStore)
+    assert issubclass(fsspec.get_filesystem_class("abfs"), AsyncFsspecStore)
+
+
+def test_register_invalid_types():
+    """Test that register rejects invalid input types."""
+    with pytest.raises(TypeError):
+        register(123)  # Not a string or list
+
+    with pytest.raises(TypeError):
+        register(["s3", 42])  # List contains a non-string
+
+    with pytest.raises(ValueError):
+        register(["s3", ""])  # List contains a non-string
+
+    with pytest.raises(TypeError):
+        register(None)  # None is invalid
+
+    with pytest.raises(ValueError):
+        register([])  # Empty list is invalid
 
 @pytest.fixture()
 def fs(s3_store):
