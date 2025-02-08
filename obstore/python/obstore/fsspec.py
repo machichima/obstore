@@ -78,13 +78,15 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     def __init__(
         self,
         *args,
-        config: S3Config
-        | S3ConfigInput
-        | GCSConfig
-        | GCSConfigInput
-        | AzureConfig
-        | AzureConfigInput
-        | None = None,
+        config: (
+            S3Config
+            | S3ConfigInput
+            | GCSConfig
+            | GCSConfigInput
+            | AzureConfig
+            | AzureConfigInput
+            | None
+        ) = None,
         client_options: ClientConfig | None = None,
         retry_config: RetryConfig | None = None,
         asynchronous: bool = False,
@@ -345,13 +347,38 @@ class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
         return data
 
 
-class S3FsspecStore(AsyncFsspecStore):
-    protocol = "s3"
+def register(protocol: str | list[str]):
+    """
+    Dynamically register a subclass of AsyncFsspecStore for the given protocol(s).
 
+    This function creates a new subclass of AsyncFsspecStore with the specified
+    protocol and registers it with fsspec. If multiple protocols are provided,
+    the function registers each one individually.
 
-class GCSFsspecStore(AsyncFsspecStore):
-    protocol = "gs"
+    Args:
+       protocol (str | list[str]):
+           A single protocol (e.g., "s3", "gcs", "abfs") or a list of protocols
+           to register AsyncFsspecStore for.
 
+    Example:
+       >>> register("s3")
+       >>> register(["gcs", "abfs"])  # Registers both "gcs" and "abfs"
 
-class AzureFsspecStore(AsyncFsspecStore):
-    protocol = "abfs"
+    Notes:
+       - Each protocol gets a dynamically generated subclass named `AsyncFsspecStore_<protocol>`.
+       - This avoids modifying the original AsyncFsspecStore class.
+    """
+
+    if isinstance(protocol, list):
+        for p in protocol:
+            register(p)
+        return
+
+    fsspec.register_implementation(
+        protocol,
+        type(
+            f"AsyncFsspecStore_{protocol}",  # Unique class name
+            (AsyncFsspecStore,),  # Base class
+            {"protocol": protocol},  # Assign protocol dynamically
+        ),
+    )
