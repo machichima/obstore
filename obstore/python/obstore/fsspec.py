@@ -37,6 +37,7 @@ from urllib.parse import urlparse
 
 import fsspec.asyn
 import fsspec.spec
+from python.obstore import Bytes
 
 import obstore as obs
 from obstore import Bytes
@@ -174,8 +175,15 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         return await obs.delete_async(store, path)
 
     async def _cp_file(self, path1, path2, **kwargs):
-        bucket, path = self._split_path(path)
-        store = self._construct_store(bucket)
+        bucket1, path1 = self._split_path(path1)
+        bucket2, path2 = self._split_path(path2)
+
+        if bucket1 != bucket2:
+            raise ValueError(
+                f"Bucket mismatch: Source bucket '{bucket1}' and destination bucket '{bucket2}' must be the same."
+            )
+
+        store = self._construct_store(bucket1)
         return await obs.copy_async(store, path1, path2)
 
     async def _pipe_file(self, path, value, mode="overwrite", **kwargs):
@@ -204,9 +212,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         on_error="return",
         **kwargs,
     ):
-        bucket, path = self._split_path(path)
-        store = self._construct_store(bucket)
-
         if isinstance(starts, int):
             starts = [starts] * len(paths)
         if isinstance(ends, int):
@@ -220,6 +225,9 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
         futs: List[Coroutine[Any, Any, List[Bytes]]] = []
         for path, ranges in per_file_requests.items():
+            bucket, path = self._split_path(path)
+            store = self._construct_store(bucket)
+
             offsets = [r[0] for r in ranges]
             ends = [r[1] for r in ranges]
             fut = obs.get_ranges_async(store, path, starts=offsets, ends=ends)
@@ -236,15 +244,31 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
         return output_buffers
 
-    async def _put_file(self, lpath, rpath, mode="overwrite", **kwargs):
-        bucket, path = self._split_path(path)
-        store = self._construct_store(bucket)
+    async def _put_file(self, lpath, rpath, **kwargs):
+        lbucket, lpath = self._split_path(lpath)
+        rbucket, rpath = self._split_path(rpath)
+
+        if lbucket != rbucket:
+            raise ValueError(
+                f"Bucket mismatch: Source bucket '{lbucket}' and destination bucket '{rbucket}' must be the same."
+            )
+
+        store = self._construct_store(lbucket)
+
         with open(lpath, "rb") as f:
             await obs.put_async(store, rpath, f)
 
     async def _get_file(self, rpath, lpath, **kwargs):
-        bucket, path = self._split_path(path)
-        store = self._construct_store(bucket)
+        lbucket, lpath = self._split_path(lpath)
+        rbucket, rpath = self._split_path(rpath)
+
+        if lbucket != rbucket:
+            raise ValueError(
+                f"Bucket mismatch: Source bucket '{lbucket}' and destination bucket '{rbucket}' must be the same."
+            )
+
+        store = self._construct_store(lbucket)
+
         with open(lpath, "wb") as f:
             resp = await obs.get_async(store, rpath)
             async for buffer in resp.stream():
@@ -296,8 +320,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         **kwargs,
     ):
         """Return raw bytes-mode file-like from the file-system"""
-        bucket, path = self._split_path(path)
-        store = self._construct_store(bucket)
 
         return BufferedFileSimple(self, path, mode, **kwargs)
 
