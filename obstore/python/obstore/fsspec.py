@@ -347,7 +347,7 @@ class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
         return data
 
 
-def register(protocol: str | list[str]):
+def register(protocol: str | list[str], asynchronous: bool = False):
     """
     Dynamically register a subclass of AsyncFsspecStore for the given protocol(s).
 
@@ -356,17 +356,21 @@ def register(protocol: str | list[str]):
     the function registers each one individually.
 
     Args:
-       protocol (str | list[str]):
-           A single protocol (e.g., "s3", "gcs", "abfs") or a list of protocols
-           to register AsyncFsspecStore for.
+        protocol (str | list[str]):
+            A single protocol (e.g., "s3", "gcs", "abfs") or a list of protocols
+            to register AsyncFsspecStore for.
+        asynchronous (bool, optional):
+           If True, the registered store will support asynchronous operations.
+           Defaults to False.
 
     Example:
-       >>> register("s3")
-       >>> register(["gcs", "abfs"])  # Registers both "gcs" and "abfs"
+        >>> register("s3")
+        >>> register("s3", asynchronous=True)  # Registers an async-store for "s3"
+        >>> register(["gcs", "abfs"])  # Registers both "gcs" and "abfs"
 
     Notes:
-       - Each protocol gets a dynamically generated subclass named `AsyncFsspecStore_<protocol>`.
-       - This avoids modifying the original AsyncFsspecStore class.
+        - Each protocol gets a dynamically generated subclass named `AsyncFsspecStore_<protocol>`.
+        - This avoids modifying the original AsyncFsspecStore class.
     """
 
     # Ensure protocol is of type str or list
@@ -398,6 +402,9 @@ def register(protocol: str | list[str]):
         type(
             f"AsyncFsspecStore_{protocol}",  # Unique class name
             (AsyncFsspecStore,),  # Base class
-            {"protocol": protocol},  # Assign protocol dynamically
+            {
+                "protocol": protocol,
+                "asynchronous": asynchronous,
+            },  # Assign protocol dynamically
         ),
     )
