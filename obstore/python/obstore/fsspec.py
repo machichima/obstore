@@ -139,7 +139,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             ['mybucket', 'path/to/file']
         """
 
-        protocol_with_bucket = ["s3", "s3a", "gcs", "gs", "abfs"]
+        protocol_with_bucket = ["s3", "s3a", "gcs", "gs", "abfs", "https", "http"]
 
         if not self.protocol in protocol_with_bucket:
             # no bucket name in path
