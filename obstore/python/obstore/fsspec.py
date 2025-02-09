@@ -96,7 +96,11 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         """Construct a new AsyncFsspecStore
 
         Args:
-            store: a configured instance of one of the store classes in `obstore.store`.
+            config: Configuration for the cloud storage provider, which can be one of
+                S3Config, S3ConfigInput, GCSConfig, GCSConfigInput, AzureConfig,
+                or AzureConfigInput. If None, no cloud storage configuration is applied.
+            client_options: Additional options for configuring the client.
+            retry_config: Configuration for handling request errors.
             asynchronous: Set to `True` if this instance is meant to be be called using
                 the fsspec async API. This should only be set to true when running
                 within a coroutine.
@@ -369,12 +373,10 @@ def register(protocol: str | list[str], asynchronous: bool = False):
     the function registers each one individually.
 
     Args:
-        protocol (str | list[str]):
-            A single protocol (e.g., "s3", "gcs", "abfs") or a list of protocols
-            to register AsyncFsspecStore for.
-        asynchronous (bool, optional):
-           If True, the registered store will support asynchronous operations.
-           Defaults to False.
+        protocol (str | list[str]): A single protocol (e.g., "s3", "gcs", "abfs") or
+            a list of protocols to register AsyncFsspecStore for.
+        asynchronous (bool, optional): If True, the registered store will support
+            asynchronous operations. Defaults to False.
 
     Example:
         >>> register("s3")
