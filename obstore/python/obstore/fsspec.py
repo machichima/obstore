@@ -265,9 +265,9 @@ class BufferedFileWrite(fsspec.spec.AbstractBufferedFile):
         """Close file
         Ensure flushing the buffer
         """
-        if self._writer.closed():
+        if self.closed:
             return
-        self._upload_chunk(final=True)
+        self.flush(force=True)
         self._writer.close()
         self.closed = True
 
