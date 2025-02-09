@@ -189,23 +189,9 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
                 "version": head["version"],
             }
         except FileNotFoundError:
-            # try ls, refer to the info implementation in fsspec
-            # https://github.com/fsspec/filesystem_spec/blob/08d1e494db177d90ccc77e5f154d5fbb34657b13/fsspec/spec.py#L643-L675
-            parent = self._parent(path)
-            out = await self._ls(parent)
-            out = [o for o in out if o["name"].rstrip("/") == path]
-            if out:
-                return out[0]
-            out = await self._ls(path)
-            out1 = [o for o in out if o["name"].rstrip("/") == path]
-            if len(out1) == 1:
-                if "size" not in out1[0]:
-                    out1[0]["size"] = None
-                return out1[0]
-            elif len(out1) > 1 or out:
-                return {"name": path, "size": 0, "type": "directory"}
-            else:
-                raise FileNotFoundError(path)
+            # use info in fsspec.AbstractFileSystem
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, super().info, path, **kwargs)
 
     async def _ls(self, path, detail=True, **kwargs):
         result = await obs.list_with_delimiter_async(self.store, path)
