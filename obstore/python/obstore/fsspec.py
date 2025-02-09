@@ -420,4 +420,5 @@ def register(protocol: str | list[str], asynchronous: bool = False):
                 "asynchronous": asynchronous,
             },  # Assign protocol dynamically
         ),
+        clobber=True,
     )
