@@ -291,6 +291,9 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             "version": head["version"],
         }
 
+    def _fill_bucket_name(self, path, bucket):
+        return f"{bucket}/{path}"
+
     async def _ls(self, path, detail=True, **kwargs):
         bucket, path = self._split_path(path)
         store = self._construct_store(bucket)
@@ -301,15 +304,25 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         if detail:
             return [
                 {
-                    "name": object["path"],
+                    "name": self._fill_bucket_name(object["path"], bucket),
                     "size": object["size"],
                     "type": "file",
                     "e_tag": object["e_tag"],
                 }
                 for object in objects
-            ] + [{"name": object, "size": 0, "type": "directory"} for object in prefs]
+            ] + [
+                {
+                    "name": self._fill_bucket_name(pref, bucket),
+                    "size": 0,
+                    "type": "directory",
+                }
+                for pref in prefs
+            ]
         else:
-            return sorted([object["path"] for object in objects] + prefs)
+            return sorted(
+                [self._fill_bucket_name(object["path"], bucket) for object in objects]
+                + [self._fill_bucket_name(pref, bucket) for pref in prefs]
+            )
 
     def _open(
         self,
