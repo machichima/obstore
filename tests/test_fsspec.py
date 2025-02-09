@@ -58,8 +58,9 @@ def test_register_invalid_types():
         register([])  # Empty list is invalid
 
 @pytest.fixture()
-def fs(s3_store):
-    return AsyncFsspecStore(s3_store)
+def fs(s3_store_config):
+    register("s3")
+    return fsspec.filesystem("s3", config=s3_store_config)
 
 
 def test_list(fs):

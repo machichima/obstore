@@ -51,3 +51,13 @@ def s3_store(s3):
             "AWS_ALLOW_HTTP": "true",
         },
     )
+
+
+@pytest.fixture()
+def s3_store_config(s3):
+    return {
+        "AWS_ENDPOINT_URL": s3,
+        "AWS_REGION": "us-east-1",
+        "AWS_SKIP_SIGNATURE": "True",
+        "AWS_ALLOW_HTTP": "true",
+    }
