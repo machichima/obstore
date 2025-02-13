@@ -111,7 +111,7 @@ async def test_list_async(s3_store_config: S3Config):
 def test_remote_parquet():
     register("https")
     fs = fsspec.filesystem("https")
-    url = "github.com/opengeospatial/geoparquet/raw/refs/heads/main/examples/example.parquet"
+    url = "github.com/opengeospatial/geoparquet/raw/refs/heads/main/examples/example.parquet"  # noqa: E501
     pq.read_metadata(url, filesystem=fs)
 
     # also test with full url
