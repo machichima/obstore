@@ -51,8 +51,8 @@ def s3_store(s3: str):
     )
 
 
-@pytest.fixture()
-def s3_store_config(s3):
+@pytest.fixture
+def s3_store_config(s3: str):
     return {
         "AWS_ENDPOINT_URL": s3,
         "AWS_REGION": "us-east-1",

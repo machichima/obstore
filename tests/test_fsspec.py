@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import os
+from typing import TYPE_CHECKING
 
 import fsspec
 import pyarrow.parquet as pq
@@ -7,29 +10,34 @@ import pytest
 from obstore.fsspec import AsyncFsspecStore, register
 from tests.conftest import TEST_BUCKET_NAME
 
+if TYPE_CHECKING:
+    from obstore.store import S3Config
+
 
 def test_register():
-    """Test that register properly creates and registers a subclass for a given protocol."""
+    """Test if register() creates and registers a subclass for a given protocol."""
     register("s3")  # Register the "s3" protocol dynamically
     fs_class = fsspec.get_filesystem_class("s3")
 
     assert issubclass(
-        fs_class, AsyncFsspecStore
+        fs_class,
+        AsyncFsspecStore,
     ), "Registered class should be a subclass of AsyncFsspecStore"
-    assert (
-        fs_class.protocol == "s3"
-    ), "Registered class should have the correct protocol"
+    assert fs_class.protocol == "s3", (
+        "Registered class should have the correct protocol"
+    )
 
     # Ensure a new instance of the registered store can be created
     fs_instance = fs_class()
     assert isinstance(
-        fs_instance, AsyncFsspecStore
+        fs_instance,
+        AsyncFsspecStore,
     ), "Registered class should be instantiable"
 
     # test register asynchronous
     register("gcs", asynchronous=True)  # Register the "s3" protocol dynamically
     fs_class = fsspec.get_filesystem_class("gcs")
-    assert fs_class.asynchronous == True, "Registered class should be asynchronous"
+    assert fs_class.asynchronous, "Registered class should be asynchronous"
 
     # test multiple registrations
     register(["file", "abfs"])
@@ -39,24 +47,36 @@ def test_register():
 
 def test_register_invalid_types():
     """Test that register rejects invalid input types."""
-    with pytest.raises(TypeError):
+    with pytest.raises(
+        TypeError,
+        match="Protocol must be a string or a list of strings",
+    ):
         register(123)  # Not a string or list
 
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="All protocols in the list must be strings"):
         register(["s3", 42])  # List contains a non-string
 
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="Protocol names in the list must be non-empty strings",
+    ):
         register(["s3", ""])  # List contains a non-string
 
-    with pytest.raises(TypeError):
+    with pytest.raises(
+        TypeError,
+        match="Protocol must be a string or a list of strings",
+    ):
         register(None)  # None is invalid
 
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="Protocol must be a non-empty string or a list of non-empty strings",
+    ):
         register([])  # Empty list is invalid
 
 
-@pytest.fixture()
-def fs(s3_store_config):
+@pytest.fixture
+def fs(s3_store_config: S3Config):
     register("s3")
     return fsspec.filesystem("s3", config=s3_store_config)
 
@@ -73,7 +93,7 @@ def test_list(fs: AsyncFsspecStore):
 
 
 @pytest.mark.asyncio
-async def test_list_async(s3_store_config):
+async def test_list_async(s3_store_config: S3Config):
     register("s3")
     fs = fsspec.filesystem("s3", config=s3_store_config, asynchronous=True)
 
@@ -137,25 +157,33 @@ def test_cat_ranges_one(fs: AsyncFsspecStore):
 
     # two disjoint ranges, one file
     out = fs.cat_ranges(
-        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data1"], [10, 40], [20, 60]
+        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data1"],
+        [10, 40],
+        [20, 60],
     )
     assert out == [data1[10:20], data1[40:60]]
 
     # two adjoining ranges, one file
     out = fs.cat_ranges(
-        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data1"], [10, 30], [20, 60]
+        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data1"],
+        [10, 30],
+        [20, 60],
     )
     assert out == [data1[10:20], data1[30:60]]
 
     # two overlapping ranges, one file
     out = fs.cat_ranges(
-        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data1"], [10, 15], [20, 60]
+        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data1"],
+        [10, 15],
+        [20, 60],
     )
     assert out == [data1[10:20], data1[15:60]]
 
     # completely overlapping ranges, one file
     out = fs.cat_ranges(
-        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data1"], [10, 0], [20, 60]
+        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data1"],
+        [10, 0],
+        [20, 60],
     )
     assert out == [data1[10:20], data1[0:60]]
 
@@ -167,7 +195,9 @@ def test_cat_ranges_two(fs: AsyncFsspecStore):
 
     # single range in each file
     out = fs.cat_ranges(
-        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data2"], [10, 10], [20, 20]
+        [f"{TEST_BUCKET_NAME}/data1", f"{TEST_BUCKET_NAME}/data2"],
+        [10, 10],
+        [20, 20],
     )
     assert out == [data1[10:20], data2[10:20]]
 

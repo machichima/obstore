@@ -39,21 +39,13 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from functools import lru_cache
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Coroutine,
-    Dict,
-    List,
-    Tuple,
-    Literal, 
-    overload
-)
+from collections.abc import Coroutine
+from typing import TYPE_CHECKING, Any, Literal, overload
 from urllib.parse import urlparse
 
 import fsspec.asyn
 import fsspec.spec
+from cachetools import LRUCache
 
 import obstore as obs
 from obstore import Bytes
@@ -66,6 +58,7 @@ if TYPE_CHECKING:
         ClientConfig,
         GCSConfig,
         GCSConfigInput,
+        ObjectStore,
         RetryConfig,
         S3Config,
         S3ConfigInput,
@@ -75,7 +68,6 @@ if TYPE_CHECKING:
     from collections.abc import Coroutine
 
     from obstore import Bytes
-
 
 
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
@@ -98,7 +90,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     client_options: ClientConfig | None
     retry_config: RetryConfig | None
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *args: Any,
         config: (
@@ -149,7 +141,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         ```
 
         """
-
+        self._store_cache = LRUCache(maxsize=10)
         self.config = config
         self.client_options = client_options
         self.retry_config = retry_config
@@ -161,48 +153,50 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             batch_size=batch_size,
         )
 
-    def _split_path(self, path: str) -> Tuple[str, str]:
-        """
-        Split bucket and file path
+    def _split_path(self, path: str) -> tuple[str, str]:
+        """Split bucket and file path.
 
         Args:
             path  (str): Input path, like `s3://mybucket/path/to/file`
 
+        Returns:
+            tuple[str, str]: with the first element as bucket name and second be
+                the file path inside the bucket
+
         Examples:
             >>> split_path("s3://mybucket/path/to/file")
             ['mybucket', 'path/to/file']
-        """
 
+        """
         protocol_with_bucket = ["s3", "s3a", "gcs", "gs", "abfs", "https", "http"]
 
-        if not self.protocol in protocol_with_bucket:
+        if self.protocol not in protocol_with_bucket:
             # no bucket name in path
             return "", path
 
         res = urlparse(path)
         if res.scheme:
             if res.scheme != self.protocol:
-                raise ValueError(
-                    f"Expect protocol to be {self.protocol}. Got {res.scheme}"
-                )
+                err_msg = f"Expect protocol to be {self.protocol}. Got {res.scheme}"
+                raise ValueError(err_msg)
             path = res.netloc + res.path
 
         if "/" not in path:
             return path, ""
-        else:
-            path_li = path.split("/")
-            bucket = path_li[0]
-            file_path = "/".join(path_li[1:])
-            return (bucket, file_path)
+        path_li = path.split("/")
+        bucket = path_li[0]
+        file_path = "/".join(path_li[1:])
+        return (bucket, file_path)
 
-    @lru_cache(maxsize=10)
-    def _construct_store(self, bucket: str):
-        return from_url(
-            url=f"{self.protocol}://{bucket}",
-            config=self.config,
-            client_options=self.client_options,
-            retry_config=self.retry_config if self.retry_config else None,
-        )
+    def _construct_store(self, bucket: str) -> ObjectStore:
+        if bucket not in self._store_cache:
+            self._store_cache[bucket] = from_url(
+                url=f"{self.protocol}://{bucket}",
+                config=self.config,
+                client_options=self.client_options,
+                retry_config=self.retry_config or None,
+            )
+        return self._store_cache[bucket]
 
     async def _rm_file(self, path: str, **_kwargs: Any) -> None:
         bucket, path = self._split_path(path)
@@ -214,9 +208,8 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         bucket2, path2 = self._split_path(path2)
 
         if bucket1 != bucket2:
-            raise ValueError(
-                f"Bucket mismatch: Source bucket '{bucket1}' and destination bucket '{bucket2}' must be the same."
-            )
+            err_msg = f"Bucket mismatch: Source bucket '{bucket1}' and destination bucket '{bucket2}' must be the same."
+            raise ValueError(err_msg)
 
         store = self._construct_store(bucket1)
         return await obs.copy_async(store, path1, path2)
@@ -279,12 +272,12 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
         futs: list[Coroutine[Any, Any, list[Bytes]]] = []
         for path, ranges in per_file_requests.items():
-            bucket, path = self._split_path(path)
+            bucket, path_no_bucket = self._split_path(path)
             store = self._construct_store(bucket)
 
             offsets = [r[0] for r in ranges]
             ends = [r[1] for r in ranges]
-            fut = obs.get_ranges_async(store, path, starts=offsets, ends=ends)
+            fut = obs.get_ranges_async(store, path_no_bucket, starts=offsets, ends=ends)
             futs.append(fut)
 
         result = await asyncio.gather(*futs)
@@ -315,9 +308,8 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         rbucket, rpath = self._split_path(rpath)
 
         if lbucket != rbucket:
-            raise ValueError(
-                f"Bucket mismatch: Source bucket '{lbucket}' and destination bucket '{rbucket}' must be the same."
-            )
+            err_msg = f"Bucket mismatch: Source bucket '{lbucket}' and destination bucket '{rbucket}' must be the same."
+            raise ValueError(err_msg)
 
         store = self._construct_store(lbucket)
 
@@ -331,9 +323,8 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         rbucket, rpath = self._split_path(rpath)
 
         if lbucket != rbucket:
-            raise ValueError(
-                f"Bucket mismatch: Source bucket '{lbucket}' and destination bucket '{rbucket}' must be the same."
-            )
+            err_msg = f"Bucket mismatch: Source bucket '{lbucket}' and destination bucket '{rbucket}' must be the same."
+            raise ValueError(err_msg)
 
         store = self._construct_store(lbucket)
 
@@ -358,7 +349,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             "version": head["version"],
         }
 
-    def _fill_bucket_name(self, path, bucket):
+    def _fill_bucket_name(self, path: str, bucket: str) -> str:
         return f"{bucket}/{path}"
 
     @overload
@@ -372,13 +363,13 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     async def _ls(
         self,
         path: str,
-        detail: Literal[True] = True,  # noqa: FBT002
+        detail: Literal[True] = True,
         **_kwargs: Any,
     ) -> list[dict[str, Any]]: ...
     async def _ls(
         self,
         path: str,
-        detail: bool = True,  # noqa: FBT001, FBT002
+        detail: bool = True,
         **_kwargs: Any,
     ) -> list[dict[str, Any]] | list[str]:
         bucket, path = self._split_path(path)
@@ -404,18 +395,17 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
                 }
                 for pref in prefs
             ]
-        else:
-            return sorted(
-                [self._fill_bucket_name(obj["path"], bucket) for obj in objects]
-                + [self._fill_bucket_name(pref, bucket) for pref in prefs]
-            )
+        return sorted(
+            [self._fill_bucket_name(obj["path"], bucket) for obj in objects]
+            + [self._fill_bucket_name(pref, bucket) for pref in prefs],
+        )
 
     def _open(
         self,
         path: str,
         mode: str = "rb",
         block_size: Any = None,  # noqa: ARG002
-        autocommit: Any = True,  # noqa: ARG002, FBT002
+        autocommit: Any = True,  # noqa: ARG002
         cache_options: Any = None,  # noqa: ARG002
         **kwargs: Any,
     ) -> BufferedFileSimple:
@@ -455,9 +445,8 @@ class BufferedFileSimple(fsspec.spec.AbstractBufferedFile):
         return data
 
 
-def register(protocol: str | list[str], asynchronous: bool = False):
-    """
-    Dynamically register a subclass of AsyncFsspecStore for the given protocol(s).
+def register(protocol: str | list[str], asynchronous: bool = False) -> None:
+    """Dynamically register a subclass of AsyncFsspecStore for the given protocol(s).
 
     This function creates a new subclass of AsyncFsspecStore with the specified
     protocol and registers it with fsspec. If multiple protocols are provided,
@@ -477,18 +466,19 @@ def register(protocol: str | list[str], asynchronous: bool = False):
     Notes:
         - Each protocol gets a dynamically generated subclass named `AsyncFsspecStore_<protocol>`.
         - This avoids modifying the original AsyncFsspecStore class.
-    """
 
+    """
     # Ensure protocol is of type str or list
-    if not isinstance(protocol, (str, list)):
-        raise TypeError(
+    if not isinstance(protocol, str | list):
+        err_msg = (
             f"Protocol must be a string or a list of strings, got {type(protocol)}"
         )
+        raise TypeError(err_msg)
 
     # Ensure protocol is not None or empty
     if not protocol:
         raise ValueError(
-            "Protocol must be a non-empty string or a list of non-empty strings."
+            "Protocol must be a non-empty string or a list of non-empty strings.",
         )
 
     if isinstance(protocol, list):
