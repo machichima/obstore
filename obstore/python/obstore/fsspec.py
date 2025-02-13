@@ -30,10 +30,7 @@ directly. Only where this is not possible should users fall back to this fsspec
 integration.
 """
 
-# ruff: noqa: ANN401
-# Dynamically typed expressions (typing.Any) are disallowed
-# ruff: noqa: PTH123
-# `open()` should be replaced by `Path.open()`
+# ruff: noqa: ANN401, PTH123, FBT001, FBT002
 
 from __future__ import annotations
 
@@ -208,7 +205,10 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         bucket2, path2 = self._split_path(path2)
 
         if bucket1 != bucket2:
-            err_msg = f"Bucket mismatch: Source bucket '{bucket1}' and destination bucket '{bucket2}' must be the same."
+            err_msg = (
+                f"Bucket mismatch: Source bucket '{bucket1}' and "
+                f"destination bucket '{bucket2}' must be the same."
+            )
             raise ValueError(err_msg)
 
         store = self._construct_store(bucket1)
@@ -308,7 +308,10 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         rbucket, rpath = self._split_path(rpath)
 
         if lbucket != rbucket:
-            err_msg = f"Bucket mismatch: Source bucket '{lbucket}' and destination bucket '{rbucket}' must be the same."
+            err_msg = (
+                f"Bucket mismatch: Source bucket '{lbucket}' and "
+                f"destination bucket '{rbucket}' must be the same."
+            )
             raise ValueError(err_msg)
 
         store = self._construct_store(lbucket)
@@ -323,7 +326,10 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         rbucket, rpath = self._split_path(rpath)
 
         if lbucket != rbucket:
-            err_msg = f"Bucket mismatch: Source bucket '{lbucket}' and destination bucket '{rbucket}' must be the same."
+            err_msg = (
+                f"Bucket mismatch: Source bucket '{lbucket}' and "
+                f"destination bucket '{rbucket}' must be the same."
+            )
             raise ValueError(err_msg)
 
         store = self._construct_store(lbucket)
@@ -464,7 +470,8 @@ def register(protocol: str | list[str], asynchronous: bool = False) -> None:
         >>> register(["gcs", "abfs"])  # Registers both "gcs" and "abfs"
 
     Notes:
-        - Each protocol gets a dynamically generated subclass named `AsyncFsspecStore_<protocol>`.
+        - Each protocol gets a dynamically generated subclass named
+          `AsyncFsspecStore_<protocol>`.
         - This avoids modifying the original AsyncFsspecStore class.
 
     """
