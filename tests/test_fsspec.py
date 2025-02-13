@@ -61,7 +61,7 @@ def fs(s3_store_config):
     return fsspec.filesystem("s3", config=s3_store_config)
 
 
-def test_list(fs):
+def test_list(fs: AsyncFsspecStore):
     out = fs.ls(f"{TEST_BUCKET_NAME}", detail=False)
     assert out == [f"{TEST_BUCKET_NAME}/afile"]
     fs.pipe_file(f"{TEST_BUCKET_NAME}/dir/bfile", b"data")
@@ -99,7 +99,7 @@ def test_remote_parquet():
     pq.read_metadata(url, filesystem=fs)
 
 
-def test_multi_file_ops(fs):
+def test_multi_file_ops(fs: AsyncFsspecStore):
     data = {
         f"{TEST_BUCKET_NAME}/dir/test1": b"test data1",
         f"{TEST_BUCKET_NAME}/dir/test2": b"test data2",
@@ -123,7 +123,7 @@ def test_multi_file_ops(fs):
     assert out == [f"{TEST_BUCKET_NAME}/afile"]
 
 
-def test_cat_ranges_one(fs):
+def test_cat_ranges_one(fs: AsyncFsspecStore):
     data1 = os.urandom(10000)
     fs.pipe_file(f"{TEST_BUCKET_NAME}/data1", data1)
 
@@ -160,7 +160,7 @@ def test_cat_ranges_one(fs):
     assert out == [data1[10:20], data1[0:60]]
 
 
-def test_cat_ranges_two(fs):
+def test_cat_ranges_two(fs: AsyncFsspecStore):
     data1 = os.urandom(10000)
     data2 = os.urandom(10000)
     fs.pipe({f"{TEST_BUCKET_NAME}/data1": data1, f"{TEST_BUCKET_NAME}/data2": data2})
@@ -173,7 +173,7 @@ def test_cat_ranges_two(fs):
 
 
 @pytest.mark.xfail(reason="negative and mixed ranges not implemented")
-def test_cat_ranges_mixed(fs):
+def test_cat_ranges_mixed(fs: AsyncFsspecStore):
     data1 = os.urandom(10000)
     data2 = os.urandom(10000)
     fs.pipe({"data1": data1, "data2": data2})
@@ -184,13 +184,13 @@ def test_cat_ranges_mixed(fs):
 
 
 @pytest.mark.xfail(reason="atomic writes not working on moto")
-def test_atomic_write(fs):
+def test_atomic_write(fs: AsyncFsspecStore):
     fs.pipe_file("data1", b"data1")
     fs.pipe_file("data1", b"data1", mode="overwrite")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError):  # noqa: PT011
         fs.pipe_file("data1", b"data1", mode="create")
 
 
-def test_cat_ranges_error(fs):
-    with pytest.raises(ValueError):
+def test_cat_ranges_error(fs: AsyncFsspecStore):
+    with pytest.raises(ValueError):  # noqa: PT011
         fs.cat_ranges([f"{TEST_BUCKET_NAME}/path"], [], [])
