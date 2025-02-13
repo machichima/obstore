@@ -226,7 +226,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         path: str,
         value: Any,
         mode: str = "overwrite",  # noqa: ARG002
-        mode="overwrite", **_kwargs: Any,
+        **_kwargs: Any,
     ) -> Any:
         bucket, path = self._split_path(path)
         store = self._construct_store(bucket)
@@ -244,7 +244,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
         if start is None and end is None:
             resp = await obs.get_async(store, path)
-            return ((await resp.bytes_async()).to_bytes()).to_bytes()
+            return (await resp.bytes_async()).to_bytes()
 
         if start is None or end is None:
             raise NotImplementedError(
