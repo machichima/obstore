@@ -35,20 +35,24 @@ integration.
 from __future__ import annotations
 
 import asyncio
+import weakref
 from collections import defaultdict
-from collections.abc import Coroutine
-from typing import TYPE_CHECKING, Any, Literal, overload
+from collections.abc import Callable, Coroutine
+from functools import lru_cache, wraps
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
 from urllib.parse import urlparse
 
 import fsspec.asyn
 import fsspec.spec
-from cachetools import LRUCache
 
 import obstore as obs
 from obstore import Bytes
 from obstore.store import from_url
 
 if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
+    from obstore import Bytes
     from obstore.store import (
         AzureConfig,
         AzureConfigInput,
@@ -61,10 +65,25 @@ if TYPE_CHECKING:
         S3ConfigInput,
     )
 
-if TYPE_CHECKING:
-    from collections.abc import Coroutine
 
-    from obstore import Bytes
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def weak_lru(maxsize: int = 128, typed: bool = False) -> Callable[[F], F]:
+    """LRU Cache decorator that keeps a weak reference to 'self'."""
+
+    def wrapper(func: F) -> F:
+        @lru_cache(maxsize, typed)
+        def _func(_self, *args, **kwargs) -> F:  # noqa: ANN001, ANN002, ANN003
+            return func(_self(), *args, **kwargs)
+
+        @wraps(func)
+        def inner(self, *args, **kwargs) -> F:  # noqa: ANN001, ANN002, ANN003
+            return _func(weakref.ref(self), *args, **kwargs)
+
+        return inner  # type: ignore[return-value]
+
+    return wrapper
 
 
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
@@ -75,17 +94,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     """
 
     cachable = False
-    config: (
-        S3Config
-        | S3ConfigInput
-        | GCSConfig
-        | GCSConfigInput
-        | AzureConfig
-        | AzureConfigInput
-        | None
-    )
-    client_options: ClientConfig | None
-    retry_config: RetryConfig | None
 
     def __init__(  # noqa: PLR0913
         self,
@@ -138,7 +146,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         ```
 
         """
-        self._store_cache = LRUCache(maxsize=10)
         self.config = config
         self.client_options = client_options
         self.retry_config = retry_config
@@ -185,15 +192,14 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         file_path = "/".join(path_li[1:])
         return (bucket, file_path)
 
+    @weak_lru(maxsize=10)
     def _construct_store(self, bucket: str) -> ObjectStore:
-        if bucket not in self._store_cache:
-            self._store_cache[bucket] = from_url(
-                url=f"{self.protocol}://{bucket}",
-                config=self.config,
-                client_options=self.client_options,
-                retry_config=self.retry_config or None,
-            )
-        return self._store_cache[bucket]
+        return from_url(
+            url=f"{self.protocol}://{bucket}",
+            config=self.config,
+            client_options=self.client_options,
+            retry_config=self.retry_config or None,
+        )
 
     async def _rm_file(self, path: str, **_kwargs: Any) -> None:
         bucket, path = self._split_path(path)
@@ -355,7 +361,8 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             "version": head["version"],
         }
 
-    def _fill_bucket_name(self, path: str, bucket: str) -> str:
+    @staticmethod
+    def _fill_bucket_name(path: str, bucket: str) -> str:
         return f"{bucket}/{path}"
 
     @overload
