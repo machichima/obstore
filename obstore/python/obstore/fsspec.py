@@ -39,6 +39,7 @@ import weakref
 from collections import defaultdict
 from collections.abc import Callable, Coroutine
 from functools import lru_cache, wraps
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
 from urllib.parse import urlparse
 
@@ -180,11 +181,13 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
 
         res = urlparse(path)
         if res.scheme:
+            # path is in url format
             if res.scheme != self.protocol:
                 err_msg = f"Expect protocol to be {self.protocol}. Got {res.scheme}"
                 raise ValueError(err_msg)
-            path = res.netloc + res.path
+            return (res.netloc, res.path)
 
+        # path not in url format
         if "/" not in path:
             return path, ""
         path_li = path.split("/")
@@ -207,8 +210,8 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         return await obs.delete_async(store, path)
 
     async def _cp_file(self, path1: str, path2: str, **_kwargs: Any) -> None:
-        bucket1, path1 = self._split_path(path1)
-        bucket2, path2 = self._split_path(path2)
+        bucket1, path1_no_bucket = self._split_path(path1)
+        bucket2, path2_no_bucket = self._split_path(path2)
 
         if bucket1 != bucket2:
             err_msg = (
@@ -218,7 +221,12 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             raise ValueError(err_msg)
 
         store = self._construct_store(bucket1)
-        return await obs.copy_async(store, path1, path2)
+
+        is_dir1, is_dir2 = await asyncio.gather(self._isdir(path1), self._isdir(path2))
+        if is_dir1 or is_dir2:
+            raise NotImplementedError("Copying directories is not supported")
+
+        return await obs.copy_async(store, path1_no_bucket, path2_no_bucket)
 
     async def _pipe_file(
         self,
@@ -308,37 +316,32 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         mode: str = "overwrite",  # noqa: ARG002
         **_kwargs: Any,
     ) -> None:
+        if not Path(lpath).is_file():
+            err_msg = f"File {lpath} not found in local"
+            raise FileNotFoundError(err_msg)
+
         # TODO: convert to use async file system methods using LocalStore
         # Async functions should not open files with blocking methods like `open`
-        lbucket, lpath = self._split_path(lpath)
         rbucket, rpath = self._split_path(rpath)
 
-        if lbucket != rbucket:
-            err_msg = (
-                f"Bucket mismatch: Source bucket '{lbucket}' and "
-                f"destination bucket '{rbucket}' must be the same."
-            )
-            raise ValueError(err_msg)
-
-        store = self._construct_store(lbucket)
+        # Should construct the store instance by rbucket, which is the target path
+        store = self._construct_store(rbucket)
 
         with open(lpath, "rb") as f:  # noqa: ASYNC230
             await obs.put_async(store, rpath, f)
 
     async def _get_file(self, rpath: str, lpath: str, **_kwargs: Any) -> None:
+        res = urlparse(lpath)
+        if res.scheme or Path(lpath).is_dir():
+            # lpath need to be local file and cannot contain scheme
+            return
+
         # TODO: convert to use async file system methods using LocalStore
         # Async functions should not open files with blocking methods like `open`
-        lbucket, lpath = self._split_path(lpath)
         rbucket, rpath = self._split_path(rpath)
 
-        if lbucket != rbucket:
-            err_msg = (
-                f"Bucket mismatch: Source bucket '{lbucket}' and "
-                f"destination bucket '{rbucket}' must be the same."
-            )
-            raise ValueError(err_msg)
-
-        store = self._construct_store(lbucket)
+        # Should construct the store instance by rbucket, which is the target path
+        store = self._construct_store(rbucket)
 
         with open(lpath, "wb") as f:  # noqa: ASYNC230
             resp = await obs.get_async(store, rpath)
@@ -346,20 +349,25 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
                 f.write(buffer)
 
     async def _info(self, path: str, **_kwargs: Any) -> dict[str, Any]:
-        bucket, path = self._split_path(path)
+        bucket, path_no_bucket = self._split_path(path)
         store = self._construct_store(bucket)
 
-        head = await obs.head_async(store, path)
-        return {
-            # Required of `info`: (?)
-            "name": head["path"],
-            "size": head["size"],
-            "type": "directory" if head["path"].endswith("/") else "file",
-            # Implementation-specific keys
-            "e_tag": head["e_tag"],
-            "last_modified": head["last_modified"],
-            "version": head["version"],
-        }
+        try:
+            head = await obs.head_async(store, path_no_bucket)
+            return {
+                # Required of `info`: (?)
+                "name": head["path"],
+                "size": head["size"],
+                "type": "directory" if head["path"].endswith("/") else "file",
+                # Implementation-specific keys
+                "e_tag": head["e_tag"],
+                "last_modified": head["last_modified"],
+                "version": head["version"],
+            }
+        except FileNotFoundError:
+            # use info in fsspec.AbstractFileSystem
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, super().info, path, **_kwargs)
 
     @staticmethod
     def _fill_bucket_name(path: str, bucket: str) -> str:
@@ -391,27 +399,26 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         result = await obs.list_with_delimiter_async(store, path)
         objects = result["objects"]
         prefs = result["common_prefixes"]
-        if detail:
-            return [
-                {
-                    "name": self._fill_bucket_name(obj["path"], bucket),
-                    "size": obj["size"],
-                    "type": "file",
-                    "e_tag": obj["e_tag"],
-                }
-                for obj in objects
-            ] + [
-                {
-                    "name": self._fill_bucket_name(pref, bucket),
-                    "size": 0,
-                    "type": "directory",
-                }
-                for pref in prefs
-            ]
-        return sorted(
-            [self._fill_bucket_name(obj["path"], bucket) for obj in objects]
-            + [self._fill_bucket_name(pref, bucket) for pref in prefs],
-        )
+        files = [
+            {
+                "name": self._fill_bucket_name(obj["path"], bucket),
+                "size": obj["size"],
+                "type": "file",
+                "e_tag": obj["e_tag"],
+            }
+            for obj in objects
+        ] + [
+            {
+                "name": self._fill_bucket_name(pref, bucket),
+                "size": 0,
+                "type": "directory",
+            }
+            for pref in prefs
+        ]
+        if not files:
+            raise FileNotFoundError(path)
+
+        return files if detail else sorted(o["name"] for o in files)
 
     def _open(
         self,
