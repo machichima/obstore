@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import gc
 import os
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import fsspec
 import pyarrow.parquet as pq
@@ -79,6 +81,89 @@ def test_register_invalid_types():
 def fs(s3_store_config: S3Config):
     register("s3")
     return fsspec.filesystem("s3", config=s3_store_config)
+
+
+def test_construct_store_cache_diff_bucket_name(s3_store_config: S3Config):
+    register("s3")
+    fs: AsyncFsspecStore = fsspec.filesystem(
+        "s3",
+        config=s3_store_config,
+        asynchronous=True,
+        max_cache_size=5,
+    )
+
+    bucket_names = [f"bucket{i}" for i in range(20)]  # 20 unique buckets
+
+    with patch.object(
+        fs,
+        "_construct_store",
+        wraps=fs._construct_store,
+    ) as mock_construct:
+        for bucket in bucket_names:
+            fs._construct_store(bucket)
+
+        # Since the cache is set to 16, only the first 16 unique calls should be cached
+        assert mock_construct.cache_info().currsize == 5, (
+            "Cache should only store 5 cache"
+        )
+        assert mock_construct.cache_info().hits == 0, "Cache should hits 0 times"
+        assert mock_construct.cache_info().misses == 20, "Cache should miss 20 times"
+
+    # test garbage collector
+    fs = None
+    assert gc.collect() > 0
+
+
+def test_construct_store_cache_same_bucket_name(s3_store_config: S3Config):
+    register("s3")
+    fs = fsspec.filesystem(
+        "s3",
+        config=s3_store_config,
+        asynchronous=True,
+        max_cache_size=5,
+    )
+
+    bucket_names = ["bucket" for _ in range(20)]
+
+    with patch.object(
+        fs,
+        "_construct_store",
+        wraps=fs._construct_store,
+    ) as mock_construct:
+        for bucket in bucket_names:
+            fs._construct_store(bucket)
+
+        assert mock_construct.cache_info().currsize == 1, (
+            "Cache should only store 1 cache"
+        )
+        assert mock_construct.cache_info().hits == 20 - 1, (
+            "Cache should hits 20-1 times"
+        )
+        assert mock_construct.cache_info().misses == 1, "Cache should only miss once"
+
+    # test garbage collector
+    fs = None
+    assert gc.collect() > 0
+
+
+def test_fsspec_filesystem_cache(s3_store_config: S3Config):
+    """Test caching behavior of fsspec.filesystem with the _Cached metaclass."""
+    register("s3")
+
+    # call fsspec.filesystem() multiple times with the same parameters
+    fs1 = fsspec.filesystem("s3", config=s3_store_config)
+    fs2 = fsspec.filesystem("s3", config=s3_store_config)
+
+    # Same parameters should return the same instance
+    assert fs1 is fs2, (
+        "fsspec.filesystem() with the same parameters should return the cached instance"
+    )
+
+    # Changing parameters should create a new instance
+    fs3 = fsspec.filesystem("s3", config=s3_store_config, asynchronous=True)
+    assert fs1 is not fs3, (
+        "fsspec.filesystem() with different parameters should return a new instance"
+    )
 
 
 def test_list(fs: AsyncFsspecStore):
