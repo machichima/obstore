@@ -76,7 +76,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     fsspec-style object.
     """
 
-    cachable = False
+    cachable = True
 
     def __init__(  # noqa: PLR0913
         self,
