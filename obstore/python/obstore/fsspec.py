@@ -35,10 +35,9 @@ integration.
 from __future__ import annotations
 
 import asyncio
-import weakref
 from collections import defaultdict
 from collections.abc import Callable, Coroutine
-from functools import lru_cache, wraps
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
 from urllib.parse import urlparse
@@ -70,23 +69,6 @@ if TYPE_CHECKING:
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def weak_lru(maxsize: int = 128, typed: bool = False) -> Callable[[F], F]:
-    """LRU Cache decorator that keeps a weak reference to 'self'."""
-
-    def wrapper(func: F) -> F:
-        @lru_cache(maxsize, typed)
-        def _func(_self, *args, **kwargs) -> F:  # noqa: ANN001, ANN002, ANN003
-            return func(_self(), *args, **kwargs)
-
-        @wraps(func)
-        def inner(self, *args, **kwargs) -> F:  # noqa: ANN001, ANN002, ANN003
-            return _func(weakref.ref(self), *args, **kwargs)
-
-        return inner  # type: ignore[return-value]
-
-    return wrapper
-
-
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     """An fsspec implementation based on a obstore Store.
 
@@ -111,6 +93,7 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         client_options: ClientConfig | None = None,
         retry_config: RetryConfig | None = None,
         asynchronous: bool = False,
+        max_cache_size: int = 10,
         loop: Any = None,
         batch_size: int | None = None,
     ) -> None:
@@ -129,6 +112,8 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             asynchronous: Set to `True` if this instance is meant to be be called using
                 the fsspec async API. This should only be set to true when running
                 within a coroutine.
+            max_cache_size (int, optional): The maximum number of items the cache should
+                store. Defaults to 10.
             loop: since both fsspec/python and tokio/rust may be using loops, this
                 should be kept `None` for now, and will not be used.
             batch_size: some operations on many files will batch their requests; if you
@@ -150,6 +135,8 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         self.config = config
         self.client_options = client_options
         self.retry_config = retry_config
+
+        self._construct_store = lru_cache(maxsize=max_cache_size)(self._construct_store)
 
         super().__init__(
             *args,
@@ -195,7 +182,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         file_path = "/".join(path_li[1:])
         return (bucket, file_path)
 
-    @weak_lru(maxsize=10)
     def _construct_store(self, bucket: str) -> ObjectStore:
         return from_url(
             url=f"{self.protocol}://{bucket}",
