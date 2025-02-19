@@ -66,9 +66,6 @@ if TYPE_CHECKING:
     )
 
 
-F = TypeVar("F", bound=Callable[..., Any])
-
-
 class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
     """An fsspec implementation based on a obstore Store.
 
@@ -207,10 +204,6 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
             raise ValueError(err_msg)
 
         store = self._construct_store(bucket1)
-
-        is_dir1, is_dir2 = await asyncio.gather(self._isdir(path1), self._isdir(path2))
-        if is_dir1 or is_dir2:
-            raise NotImplementedError("Copying directories is not supported")
 
         return await obs.copy_async(store, path1_no_bucket, path2_no_bucket)
 
