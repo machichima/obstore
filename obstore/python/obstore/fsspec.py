@@ -247,6 +247,32 @@ class AsyncFsspecStore(fsspec.asyn.AsyncFileSystem):
         range_bytes = await obs.get_range_async(store, path, start=start, end=end)
         return range_bytes.to_bytes()
 
+    async def _cat(
+        self,
+        path: str,
+        recursive: bool = False,
+        on_error: str = "raise",
+        batch_size: int | None = None,
+        **_kwargs: Any,
+    ) -> bytes | dict[str, bytes]:
+        paths = await self._expand_path(path, recursive=recursive)
+
+        # Filter out directories
+        files = [p for p in paths if not await self._isdir(p)]
+
+        if not files:
+            err_msg = f"No valid files found in {path}"
+            raise FileNotFoundError(err_msg)
+
+        # Call the original _cat only on files
+        return await super()._cat(
+            files,
+            recursive=False,
+            on_error=on_error,
+            batch_size=batch_size,
+            **_kwargs,
+        )
+
     async def _cat_ranges(  # noqa: PLR0913
         self,
         paths: list[str],
