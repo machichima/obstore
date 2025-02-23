@@ -8,12 +8,30 @@ from unittest.mock import patch
 import fsspec
 import pyarrow.parquet as pq
 import pytest
+from fsspec.registry import _registry
 
 from obstore.fsspec import AsyncFsspecStore, register
 from tests.conftest import TEST_BUCKET_NAME
 
 if TYPE_CHECKING:
     from obstore.store import S3Config
+
+
+@pytest.fixture
+def fs(s3_store_config: S3Config):
+    register("s3")
+    return fsspec.filesystem("s3", config=s3_store_config)
+
+
+@pytest.fixture(autouse=True)
+def cleanup_after_test():
+    """Cleanup function to run after each test."""
+    yield  # Runs the test first
+
+    # clear the registered implementations after each test
+    _registry.clear()
+
+    gc.collect()
 
 
 def test_register():
@@ -56,13 +74,13 @@ def test_register_invalid_types():
         register(123)  # Not a string or list
 
     with pytest.raises(TypeError, match="All protocols in the list must be strings"):
-        register(["s3", 42])  # List contains a non-string
+        register(["test", 42])  # List contains a non-string
 
     with pytest.raises(
         ValueError,
         match="Protocol names in the list must be non-empty strings",
     ):
-        register(["s3", ""])  # List contains a non-string
+        register(["test1", ""])  # List contains a non-string
 
     with pytest.raises(
         TypeError,
@@ -75,12 +93,6 @@ def test_register_invalid_types():
         match="Protocol must be a non-empty string or a list of non-empty strings",
     ):
         register([])  # Empty list is invalid
-
-
-@pytest.fixture
-def fs(s3_store_config: S3Config):
-    register("s3")
-    return fsspec.filesystem("s3", config=s3_store_config)
 
 
 def test_construct_store_cache_diff_bucket_name(s3_store_config: S3Config):
